@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MemeFactory</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<style>
+body{font-family:sans-serif;max-width:600px;margin:auto;padding:12px;background:#111;color:#eee}
+input,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box}
+.card{border:1px solid #333;padding:10px;margin:8px 0;border-radius:8px;word-break:break-all}
+</style>
+</head>
+<body>
+<h2>MemeFactory (QoreChain Diana)</h2>
+<div id="status">Loading...</div>
+<h3>Tokens</h3>
+<div id="list"></div>
+<h3>Create token</h3>
+<input id="name" placeholder="Name (max 32 chars)">
+<input id="symbol" placeholder="Symbol (max 10 chars)">
+<input id="supply" placeholder="Supply (whole number)">
+<input id="desc" placeholder="Description">
+<button id="create">Create (needs wallet browser)</button>
+<script>
+const FACTORY = "0x6944168F50aCCBB602c519a0f85B17610E06594b";
+const RPC = "https://evm-testnet.qore.host";
+const CHAIN_ID = 9800;
+const FACTORY_ABI = [
+  "function tokenCount() view returns (uint256)",
+  "function tokens(uint256) view returns (address)",
+  "function createToken(string name, string symbol, uint256 supply, string description) returns (address)"
+];
+const TOKEN_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function totalSupply() view returns (uint256)",
+  "function creator() view returns (address)"
+];
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
+
+async function load() {
+  const f = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
+  const n = Number(await f.tokenCount());
+  $("status").textContent = n + " token(s)";
+  let html = "";
+  for (let i = 0; i < n; i++) {
+    const addr = await f.tokens(i);
+    const t = new ethers.Contract(addr, TOKEN_ABI, reader);
+    const [name, symbol, supply, creator] = await Promise.all([
+      t.name(), t.symbol(), t.totalSupply(), t.creator()
+    ]);
+    html += `<div class="card"><b>${esc(name)} (${esc(symbol)})</b><br>
+      supply (raw): ${supply}<br>creator: ${esc(creator)}<br>token: ${esc(addr)}</div>`;
+  }
+  $("list").innerHTML = html || "No tokens yet";
+}
+load().catch(e => $("status").textContent = "Error: " + (e.shortMessage || e.message));
+
+$("create").onclick = async () => {
+  try {
+    if (!window.ethereum) throw new Error("No wallet found. Open this page inside your wallet's browser.");
+    const p = new ethers.BrowserProvider(window.ethereum);
+    await p.send("eth_requestAccounts", []);
+    const net = await p.getNetwork();
+    if (Number(net.chainId) !== CHAIN_ID) throw new Error("Switch your wallet to chain 9800");
+    const f = new ethers.Contract(FACTORY, FACTORY_ABI, await p.getSigner());
+    const tx = await f.createToken($("name").value, $("symbol").value, $("supply").value, $("desc").value);
+    $("status").textContent = "Sent: " + tx.hash;
+    await tx.wait();
+    load();
+  } catch (e) {
+    $("status").textContent = "Error: " + (e.shortMessage || e.message);
+  }
+};
+</script>
+</body>
+</html>
