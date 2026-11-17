@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<!-- version: v2.0.0 -->
-<title>Reqo v2.0.0</title>
+<!-- version: v2.2.0 -->
+<title>Reqo v2.2.0</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
 body{font-family:sans-serif;max-width:600px;margin:auto;padding:12px;background:#111;color:#eee}
@@ -12,20 +12,27 @@ input,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box}
 button{background:#2b6cb0;color:#fff;border:0;border-radius:6px;font-size:16px}
 button:disabled{background:#444}
 .card{border:1px solid #333;padding:10px;margin:8px 0;border-radius:8px;word-break:break-all}
+.banner{padding:10px;border-radius:8px;margin:8px 0;background:#1d2a1d;border:1px solid #2f5f2f}
+.banner.pending{background:#2a2412;border-color:#6b5520}
+.banner.closed{background:#2a1212;border-color:#6b2020}
 .hint{color:#999;font-size:13px}
 </style>
 </head>
 <body>
-<h2>Reqo v2.0.0 (QoreChain Diana)</h2>
-<div id="status">Loading...</div>
+<h2>Reqo v2.2.0 (QoreChain Diana)</h2>
+<div id="banner" class="banner">Checking relayer status...</div>
+<div id="status"></div>
 <h3>Tokens</h3>
 <div id="list"></div>
 <h3>Create token</h3>
-<p class="hint">You sign a request in your wallet. No transaction and no gas are needed from you. The relayer submits it. Your wallet must be on QoreChain Diana (chain 9800); the page will ask it to switch.</p>
+<p class="hint">You sign a request in your wallet. No transaction and no gas are needed from you. If the relayer window is closed, your request is queued and submitted automatically when it opens. Your wallet must be on QoreChain Diana (chain 9800); the page will ask it to switch.</p>
 <input id="name" placeholder="Name (max 32 bytes)">
-<input id="symbol" placeholder="Symbol (max 10 bytes)">
+<input id="symbol" placeholder="Ticker, e.g. CWB (shown as $CWB)">
 <input id="supply" placeholder="Supply (whole tokens, 1 to 1000000000000)">
-<input id="desc" placeholder="Description (max 280 bytes)">
+<input id="desc" placeholder="Description (max 280 bytes, the image link counts toward it)">
+<label class="hint">Token image (optional, PNG, JPEG or WebP, up to 1 MB)</label>
+<input id="image" type="file" accept="image/png,image/jpeg,image/webp">
+<img id="preview" alt="" style="display:none;max-width:120px;border-radius:8px;margin:4px 0">
 <button id="create">Create token</button>
 <script>
 const FACTORY = "0xbEe5D528b86fDe7bd68a1330B4A76E838390d356";
@@ -40,7 +47,8 @@ const TOKEN_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
   "function totalSupply() view returns (uint256)",
-  "function creator() view returns (address)"
+  "function creator() view returns (address)",
+  "function description() view returns (string)"
 ];
 const domain = { name: "Reqo MemeFactory", version: "2", chainId: CHAIN_ID, verifyingContract: FACTORY };
 const types = {
@@ -56,32 +64,71 @@ const types = {
 };
 
 const $ = id => document.getElementById(id);
+const IMG_HOST = "blob.vercel-storage.com";
+const IMG_PATTERN = /\simg:(https:\/\/\S+)$/;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const setStatus = t => $("status").textContent = t;
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
+let pollTimer = null;
+
+function fmtTime(iso) {
+  return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+async function loadStatus() {
+  try {
+    const r = await fetch("/api/status");
+    const s = await r.json();
+    const b = $("banner");
+    if (s.windowLive) {
+      b.className = "banner";
+      b.textContent = "Relayer window is live. Creation is instant.";
+    } else if (s.opensAt && Date.parse(s.opensAt) > Date.now()) {
+      b.className = "banner pending";
+      b.textContent = "Creation pending until " + fmtTime(s.opensAt) + ". Requests you sign now are queued and submitted automatically.";
+    } else {
+      b.className = "banner closed";
+      b.textContent = "Relayer window is closed. Requests you sign now are queued until the next opening.";
+    }
+    if (s.queued) b.textContent += " (" + s.queued + " queued)";
+    return s;
+  } catch (e) {
+    $("banner").className = "banner closed";
+    $("banner").textContent = "Could not reach the relayer status: " + e.message;
+    return null;
+  }
+}
 
 async function load() {
   try {
     const f = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
     const n = Number(await f.tokenCount());
-    setStatus(n + " token(s)");
     let html = "";
     for (let i = 0; i < n; i++) {
       const addr = await f.tokens(i);
       const t = new ethers.Contract(addr, TOKEN_ABI, reader);
-      const [name, symbol, supply, creator] = await Promise.all([
-        t.name(), t.symbol(), t.totalSupply(), t.creator()
+      const [name, symbol, supply, creator, rawDesc] = await Promise.all([
+        t.name(), t.symbol(), t.totalSupply(), t.creator(), t.description()
       ]);
-      const whole = ethers.formatUnits(supply, 18);
-      html += `<div class="card"><b>${esc(name)} (${esc(symbol)})</b><br>
-        supply: ${esc(whole)}<br>creator: ${esc(creator)}<br>token: ${esc(addr)}</div>`;
+      const m = rawDesc.match(IMG_PATTERN);
+      const text = m ? rawDesc.replace(IMG_PATTERN, "") : rawDesc;
+      let img = "";
+      if (m) {
+        try {
+          const u = new URL(m[1]);
+          if (u.hostname.endsWith(IMG_HOST)) {
+            img = `<img src="${esc(u.href)}" alt="" style="max-width:120px;border-radius:8px;margin-bottom:6px"><br>`;
+          }
+        } catch (_) {}
+      }
+      html += `<div class="card">${img}<b>${esc(name)} ($${esc(symbol)})</b><br>
+        ${text ? esc(text) + "<br>" : ""}supply: ${esc(ethers.formatUnits(supply, 18))}<br>creator: ${esc(creator)}<br>token: ${esc(addr)}</div>`;
     }
     $("list").innerHTML = html || "No tokens yet";
   } catch (e) {
     setStatus("Error loading tokens: " + (e.shortMessage || e.message));
   }
 }
-load();
 
 async function ensureChain(p) {
   const net = await p.getNetwork();
@@ -106,11 +153,62 @@ async function ensureChain(p) {
 function checkInputs(r) {
   const bytes = s => new TextEncoder().encode(s).length;
   if (bytes(r.name) < 1 || bytes(r.name) > 32) throw new Error("Name must be 1 to 32 bytes");
-  if (bytes(r.symbol) < 1 || bytes(r.symbol) > 10) throw new Error("Symbol must be 1 to 10 bytes");
+  if (bytes(r.symbol) < 1 || bytes(r.symbol) > 10) throw new Error("Ticker must be 1 to 10 characters");
   if (bytes(r.description) > 280) throw new Error("Description must be at most 280 bytes");
   if (!/^\d+$/.test(r.supply)) throw new Error("Supply must be a whole number");
   const s = BigInt(r.supply);
   if (s < 1n || s > 1000000000000n) throw new Error("Supply must be between 1 and 1000000000000");
+}
+
+function pollRequest(id) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch("/api/status?id=" + encodeURIComponent(id));
+      const j = await r.json();
+      if (j.status === "submitted") {
+        clearInterval(pollTimer);
+        setStatus("Submitted on chain: " + j.txHash + ". Refreshing list...");
+        setTimeout(load, 5000);
+      } else if (j.status === "expired" || j.status === "error") {
+        clearInterval(pollTimer);
+        setStatus("Request " + j.status + (j.error ? ": " + j.error : "") + ". Sign again to retry.");
+      } else {
+        setStatus("Queued. Waiting for the window to open" + (j.deadline ? " (valid until " + fmtTime(new Date(j.deadline * 1000).toISOString()) + ")" : "") + ".");
+      }
+    } catch (e) {
+      setStatus("Status check failed: " + e.message + ". Still waiting.");
+    }
+  }, 30000);
+}
+
+$("image").onchange = () => {
+  const f = $("image").files[0];
+  if (!f) { $("preview").style.display = "none"; return; }
+  $("preview").src = URL.createObjectURL(f);
+  $("preview").style.display = "block";
+};
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result.split(",")[1]);
+    fr.onerror = () => reject(new Error("could not read the image"));
+    fr.readAsDataURL(file);
+  });
+}
+
+async function uploadImage(file) {
+  if (file.size > 1024 * 1024) throw new Error("Image must be under 1 MB");
+  const data = await fileToBase64(file);
+  const r = await fetch("/api/upload", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ contentType: file.type, data })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || "image upload failed");
+  return j.url;
 }
 
 $("create").onclick = async () => {
@@ -125,14 +223,31 @@ $("create").onclick = async () => {
     p = new ethers.BrowserProvider(window.ethereum);
     const signer = await p.getSigner();
 
+    const s = await loadStatus();
+    const now = Math.floor(Date.now() / 1000);
+    const opensAtSec = s && s.opensAt ? Math.floor(Date.parse(s.opensAt) / 1000) : 0;
+    const deadline = Math.max(now + 3600, opensAtSec > now ? opensAtSec + 3600 : 0);
+
+    const symbol = $("symbol").value.trim().replace(/^\$+/, "");
+
+    let description = $("desc").value.trim();
+    const file = $("image").files[0];
+    if (file) {
+      setStatus("Uploading image...");
+      const url = await uploadImage(file);
+      description = (description ? description + " " : "") + "img:" + url;
+    }
+    if (new TextEncoder().encode(description).length > 280)
+      throw new Error("Description plus image link must be at most 280 bytes. Shorten the description.");
+
     const request = {
       creator: await signer.getAddress(),
       name: $("name").value.trim(),
-      symbol: $("symbol").value.trim(),
+      symbol,
       supply: $("supply").value.trim(),
-      description: $("desc").value.trim(),
+      description,
       nonce: String(Date.now()),
-      deadline: String(Math.floor(Date.now() / 1000) + 3600)
+      deadline: String(deadline)
     };
     checkInputs(request);
 
@@ -148,14 +263,23 @@ $("create").onclick = async () => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
 
-    setStatus("Submitted: " + j.txHash + ". Refreshing list in 20 seconds...");
-    setTimeout(load, 20000);
+    if (j.status === "queued") {
+      setStatus("Queued. Waiting for the window to open" + (j.opensAt ? " at " + fmtTime(j.opensAt) : "") + ".");
+      pollRequest(j.id);
+    } else {
+      setStatus("Submitted on chain: " + j.txHash + ". Refreshing list in 20 seconds...");
+      setTimeout(load, 20000);
+    }
   } catch (e) {
     setStatus("Error: " + (e.shortMessage || e.message));
   } finally {
     btn.disabled = false;
   }
 };
+
+loadStatus();
+load();
+setInterval(loadStatus, 60000);
 </script>
 </body>
 </html>
