@@ -3,38 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Reqo v1.1.1</title>
-<!-- version: v1.1.1 -->
+<!-- version: v2.0.0 -->
+<title>Reqo v2.0.0</title>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
 body{font-family:sans-serif;max-width:600px;margin:auto;padding:12px;background:#111;color:#eee}
 input,button{padding:8px;margin:4px 0;width:100%;box-sizing:border-box}
 button{background:#2b6cb0;color:#fff;border:0;border-radius:6px;font-size:16px}
+button:disabled{background:#444}
 .card{border:1px solid #333;padding:10px;margin:8px 0;border-radius:8px;word-break:break-all}
 .hint{color:#999;font-size:13px}
 </style>
 </head>
 <body>
-<h2>Reqo v1.1.1 (MemeFactory, QoreChain Diana)</h2>
+<h2>Reqo v2.0.0 (QoreChain Diana)</h2>
 <div id="status">Loading...</div>
 <h3>Tokens</h3>
 <div id="list"></div>
 <h3>Create token</h3>
-<p class="hint">Opens your wallet to switch to QoreChain Diana (chain 9800) if needed. Use a wallet browser (for example Brave with its wallet, or MetaMask's browser).</p>
-<input id="name" placeholder="Name (max 32 chars)">
-<input id="symbol" placeholder="Symbol (max 10 chars)">
-<input id="supply" placeholder="Supply (whole number)">
-<input id="desc" placeholder="Description">
+<p class="hint">You sign a request in your wallet. No transaction and no gas are needed from you. The relayer submits it. Your wallet must be on QoreChain Diana (chain 9800); the page will ask it to switch.</p>
+<input id="name" placeholder="Name (max 32 bytes)">
+<input id="symbol" placeholder="Symbol (max 10 bytes)">
+<input id="supply" placeholder="Supply (whole tokens, 1 to 1000000000000)">
+<input id="desc" placeholder="Description (max 280 bytes)">
 <button id="create">Create token</button>
 <script>
-const FACTORY = "0x6944168F50aCCBB602c519a0f85B17610E06594b";
+const FACTORY = "0xbEe5D528b86fDe7bd68a1330B4A76E838390d356";
 const RPC = "https://evm-testnet.qore.host";
 const CHAIN_ID = 9800;
 const CHAIN_HEX = "0x" + CHAIN_ID.toString(16);
 const FACTORY_ABI = [
   "function tokenCount() view returns (uint256)",
-  "function tokens(uint256) view returns (address)",
-  "function createToken(string name, string symbol, uint256 supply, string description) returns (address)"
+  "function tokens(uint256) view returns (address)"
 ];
 const TOKEN_ABI = [
   "function name() view returns (string)",
@@ -42,29 +42,47 @@ const TOKEN_ABI = [
   "function totalSupply() view returns (uint256)",
   "function creator() view returns (address)"
 ];
+const domain = { name: "Reqo MemeFactory", version: "2", chainId: CHAIN_ID, verifyingContract: FACTORY };
+const types = {
+  CreateToken: [
+    { name: "creator", type: "address" },
+    { name: "name", type: "string" },
+    { name: "symbol", type: "string" },
+    { name: "supply", type: "uint256" },
+    { name: "description", type: "string" },
+    { name: "nonce", type: "uint256" },
+    { name: "deadline", type: "uint256" }
+  ]
+};
+
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const setStatus = t => $("status").textContent = t;
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
 
 async function load() {
-  const f = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
-  const n = Number(await f.tokenCount());
-  $("status").textContent = n + " token(s)";
-  let html = "";
-  for (let i = 0; i < n; i++) {
-    const addr = await f.tokens(i);
-    const t = new ethers.Contract(addr, TOKEN_ABI, reader);
-    const [name, symbol, supply, creator] = await Promise.all([
-      t.name(), t.symbol(), t.totalSupply(), t.creator()
-    ]);
-    html += `<div class="card"><b>${esc(name)} (${esc(symbol)})</b><br>
-      supply (raw): ${supply}<br>creator: ${esc(creator)}<br>token: ${esc(addr)}</div>`;
+  try {
+    const f = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
+    const n = Number(await f.tokenCount());
+    setStatus(n + " token(s)");
+    let html = "";
+    for (let i = 0; i < n; i++) {
+      const addr = await f.tokens(i);
+      const t = new ethers.Contract(addr, TOKEN_ABI, reader);
+      const [name, symbol, supply, creator] = await Promise.all([
+        t.name(), t.symbol(), t.totalSupply(), t.creator()
+      ]);
+      const whole = ethers.formatUnits(supply, 18);
+      html += `<div class="card"><b>${esc(name)} (${esc(symbol)})</b><br>
+        supply: ${esc(whole)}<br>creator: ${esc(creator)}<br>token: ${esc(addr)}</div>`;
+    }
+    $("list").innerHTML = html || "No tokens yet";
+  } catch (e) {
+    setStatus("Error loading tokens: " + (e.shortMessage || e.message));
   }
-  $("list").innerHTML = html || "No tokens yet";
 }
-load().catch(e => $("status").textContent = "Error: " + (e.shortMessage || e.message));
+load();
 
-// Ask the wallet to switch to chain 9800; add the chain first if the wallet doesn't know it.
 async function ensureChain(p) {
   const net = await p.getNetwork();
   if (Number(net.chainId) === CHAIN_ID) return;
@@ -85,26 +103,57 @@ async function ensureChain(p) {
   }
 }
 
+function checkInputs(r) {
+  const bytes = s => new TextEncoder().encode(s).length;
+  if (bytes(r.name) < 1 || bytes(r.name) > 32) throw new Error("Name must be 1 to 32 bytes");
+  if (bytes(r.symbol) < 1 || bytes(r.symbol) > 10) throw new Error("Symbol must be 1 to 10 bytes");
+  if (bytes(r.description) > 280) throw new Error("Description must be at most 280 bytes");
+  if (!/^\d+$/.test(r.supply)) throw new Error("Supply must be a whole number");
+  const s = BigInt(r.supply);
+  if (s < 1n || s > 1000000000000n) throw new Error("Supply must be between 1 and 1000000000000");
+}
+
 $("create").onclick = async () => {
+  const btn = $("create");
+  btn.disabled = true;
   try {
-    if (!window.ethereum) {
-      throw new Error("No wallet found. Open this page in a wallet browser (Brave wallet or MetaMask).");
-    }
+    if (!window.ethereum) throw new Error("No wallet found. Open this page in a wallet browser.");
     let p = new ethers.BrowserProvider(window.ethereum);
     await p.send("eth_requestAccounts", []);
-    $("status").textContent = "Switching wallet to chain 9800...";
+    setStatus("Switching wallet to chain 9800...");
     await ensureChain(p);
-    // Recreate the provider after the switch so ethers doesn't see a stale network.
     p = new ethers.BrowserProvider(window.ethereum);
-    const f = new ethers.Contract(FACTORY, FACTORY_ABI, await p.getSigner());
-    $("status").textContent = "Confirm the transaction in your wallet...";
-    const tx = await f.createToken($("name").value, $("symbol").value, $("supply").value, $("desc").value);
-    $("status").textContent = "Sent: " + tx.hash;
-    await tx.wait();
-    $("status").textContent = "Token created. Refreshing list...";
-    load();
+    const signer = await p.getSigner();
+
+    const request = {
+      creator: await signer.getAddress(),
+      name: $("name").value.trim(),
+      symbol: $("symbol").value.trim(),
+      supply: $("supply").value.trim(),
+      description: $("desc").value.trim(),
+      nonce: String(Date.now()),
+      deadline: String(Math.floor(Date.now() / 1000) + 3600)
+    };
+    checkInputs(request);
+
+    setStatus("Sign the request in your wallet. No gas is charged for signing.");
+    const signature = await signer.signTypedData(domain, types, request);
+
+    setStatus("Sending to relayer...");
+    const r = await fetch("/api/relay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request, signature })
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
+
+    setStatus("Submitted: " + j.txHash + ". Refreshing list in 20 seconds...");
+    setTimeout(load, 20000);
   } catch (e) {
-    $("status").textContent = "Error: " + (e.shortMessage || e.message);
+    setStatus("Error: " + (e.shortMessage || e.message));
+  } finally {
+    btn.disabled = false;
   }
 };
 </script>
