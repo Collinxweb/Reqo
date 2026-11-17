@@ -159,6 +159,8 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D12 | Show tickers as `$SYMBOL` in the page; store the plain symbol on chain | No contract change needed. Existing tokens are unaffected. | **Implemented** (v2.1.0) |
 | D13 | Store the planned opening time in KV, set through `/api/process?opensAt=` | Changing the schedule needs no redeploy. | **Implemented** (v2.1.0) |
 | D14 | Token images stored in Vercel Blob, with the link inside the on-chain description as `img:<url>` | No contract change or redeploy. The link is verifiable on chain. Costs description bytes (280 total). | **Implemented** (v2.2.0), not yet tested live |
+| D16 | Relayer windows are scheduled for 01:00 and 13:00 UTC, five hours each | Gives testers and judges predictable test slots in both UTC halves of the day. | **Implemented** (v2.4.0) |
+| D17 | Window opening stays manual in QoreX until a server-side signing route is verified | The ML-DSA-87 key is not stored on Vercel (D10). Opening is a signed on-chain action that has not been verified from a server. | Accepted for judging sessions |
 | D15 | Board and Launch as the main UI, in a mobile layout. Features not built show as coming soon. | Judges see only live features. Roadmap items stay visible without implying they work. | **Implemented** (v2.3.0) |
 
 ## 9. Open Questions
@@ -173,6 +175,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | Q6 | Does Brave's wallet connect to the Diana account that holds the window? | **Resolved for signing:** the real wallet signed through Brave's wallet. |
 | Q7 | What rate limits and gas budget should the relayer enforce? | Measure gas per creation from receipts, then set `max_value` for each session. |
 | Q8 | Can a signed request be replayed on another chain or factory? | Domain includes chainId and verifyingContract, so no. Confirm with a second factory deploy. |
+| Q13 | Can a window be opened from a server-side function with an ML-DSA-87 signature? | Unverified. Needed for automatic opening. Check the SDK signing path and whether it runs in Node. |
 | Q9 | Which account should be the relayer for judging sessions? | Decision pending (D11). Requires a new qor1 address, a faucet top-up, and its own window if changed. |
 | Q10 | Where should token images be stored? | **Resolved: Vercel Blob** (D14). Requires a Blob store connected to reqo. |
 | Q11 | Does the Vercel KV environment variable set appear after the Upstash connection? | Check at `https://vercel.com/collinxweb1/reqo/settings/environment-variables`. |
@@ -184,6 +187,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.4.0 | 2026-11-17 | (pending) | Scheduled relayer windows at 01:00 and 13:00 UTC, each planned for five hours. The next planned opening is calculated automatically; a KV override still works for one-off changes. Window opening remains manual. |
 | v2.3.0 | 2026-11-17 | (pending) | Nearly-style mobile layout: Board (live token list with search and newest-first sorting), Launch (live creation with image upload and queued submission), More. Reqo logo added. Feed, Portfolio, Swap, Market cap, Hot, Volume, and Holders show as coming soon. |
 | v2.2.0 | 2026-11-17 | f77457d | Token image upload through `/api/upload` (Vercel Blob). Image link stored in the on-chain description. Token cards show the image for Blob links only. |
 | v2.1.0 | 2026-11-17 | (pending) | Queue for signed requests when the window is closed. Scheduled opening time banner. Automatic submission through `/api/process`. Status endpoint. `$` ticker display. Upstash Redis `reqo-queue` connected to reqo. |
@@ -232,10 +236,11 @@ Each update follows this block, and each release adds an entry to the changelog 
 1. Confirm `CRON_SECRET` and the Blob token are set in Vercel, then redeploy.
 2. Test the queue: sign while the window is closed, confirm it is queued, open the window, and confirm submission within a minute.
 3. Test image upload with a small PNG and confirm the token card shows the image.
-4. Decide the swap design (see section 14), then build it.
-5. Decide D11 and Q9 (relayer account).
-6. Measure gas per creation and set `max_value` per session (Q7).
-7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+4. Open windows manually at about 00:55 and 12:55 UTC for each session (D17).
+5. Build the swap feature on route A (see section 14).
+6. Decide D11 and Q9 (relayer account), and verify Q13 before automating window opening.
+7. Measure gas per creation and set `max_value` per session (Q7).
+8. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
 ## 14. Swap Design (decision pending)
 
