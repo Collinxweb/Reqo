@@ -12,7 +12,9 @@ Reqo is a memecoin launchpad on QoreChain testnet (Diana). Users create tokens f
 
 - **v1** (Solidity, deployed): only the account holding an open EVM window can create tokens.
 - **v2** (Solidity, deployed and tested): users sign a creation request off chain, and a relayer submits it. The signer is recorded as creator, so users need no window. Supply uses 18 decimals.
-- **v2.1.0** (frontend and API, pending deploy): when the relayer window is closed, signed requests are queued and submitted automatically once it opens. The page shows the planned opening time and displays tickers with a `$` prefix.
+- **v2.1.0** (frontend and API): when the relayer window is closed, signed requests are queued and submitted automatically once it opens. The page shows the planned opening time and displays tickers with a `$` prefix.
+- **v2.2.0** (API and frontend): token images. The image is uploaded to Vercel Blob, and its link is stored inside the on-chain description as `img:<url>`.
+- **v2.3.0** (frontend): Nearly-style mobile layout with Board, Launch, and More tabs, the Reqo logo, and coming-soon placeholders for features not yet built.
 
 A real wallet with no window of its own has created a token through the v2 relayer (see section 5). Queued submission is built but not yet tested.
 
@@ -26,6 +28,7 @@ A real wallet with no window of its own has created a token through the v2 relay
 | Local repo | ~/Reqo |
 | Local deploy folder | ~/deploy (ABI, bytecode, deploy and test scripts) |
 | Relayer submit | POST /api/relay |
+| Image upload | POST /api/upload (PNG, JPEG, WebP, up to 1 MB, 10 per hour per IP) |
 | Status | GET /api/status, GET /api/status?id=... |
 | Scheduler | GET /api/process (requires x-cron-secret header) |
 | Queue storage | Upstash Redis, database `reqo-queue`, Free plan, connected to reqo |
@@ -120,6 +123,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | OWNER_PK | Relayer private key | [verified] set earlier |
 | CRON_SECRET | Generated locally, 32 random bytes | [open] to be added |
 | WINDOW_OPENS_AT | Optional fallback | Not used when config:opensAt is set |
+| BLOB_READ_WRITE_TOKEN | Added when a Vercel Blob store is connected to reqo | [open] store creation and redeploy pending |
 
 **Status and build checks:** all four server files and the page script pass syntax checks. Live behaviour is not yet tested.
 
@@ -154,6 +158,8 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D11 | Use a dedicated testnet relayer account, separate from the owner account | Limits exposure of the main account if the Vercel environment is compromised. | **Open**, awaiting decision |
 | D12 | Show tickers as `$SYMBOL` in the page; store the plain symbol on chain | No contract change needed. Existing tokens are unaffected. | **Implemented** (v2.1.0) |
 | D13 | Store the planned opening time in KV, set through `/api/process?opensAt=` | Changing the schedule needs no redeploy. | **Implemented** (v2.1.0) |
+| D14 | Token images stored in Vercel Blob, with the link inside the on-chain description as `img:<url>` | No contract change or redeploy. The link is verifiable on chain. Costs description bytes (280 total). | **Implemented** (v2.2.0), not yet tested live |
+| D15 | Board and Launch as the main UI, in a mobile layout. Features not built show as coming soon. | Judges see only live features. Roadmap items stay visible without implying they work. | **Implemented** (v2.3.0) |
 
 ## 9. Open Questions
 
@@ -168,7 +174,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | Q7 | What rate limits and gas budget should the relayer enforce? | Measure gas per creation from receipts, then set `max_value` for each session. |
 | Q8 | Can a signed request be replayed on another chain or factory? | Domain includes chainId and verifyingContract, so no. Confirm with a second factory deploy. |
 | Q9 | Which account should be the relayer for judging sessions? | Decision pending (D11). Requires a new qor1 address, a faucet top-up, and its own window if changed. |
-| Q10 | Where should token images be stored? | Vercel Blob (same project, simpler) or IPFS (decentralized, slower). Decision pending. Image upload is not built. |
+| Q10 | Where should token images be stored? | **Resolved: Vercel Blob** (D14). Requires a Blob store connected to reqo. |
 | Q11 | Does the Vercel KV environment variable set appear after the Upstash connection? | Check at `https://vercel.com/collinxweb1/reqo/settings/environment-variables`. |
 | Q12 | Is the billing address warning on the Vercel account blocking any features? | Shown on the Vercel dashboard. Free plan use is unaffected so far. |
 
@@ -178,6 +184,8 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.3.0 | 2026-11-17 | (pending) | Nearly-style mobile layout: Board (live token list with search and newest-first sorting), Launch (live creation with image upload and queued submission), More. Reqo logo added. Feed, Portfolio, Swap, Market cap, Hot, Volume, and Holders show as coming soon. |
+| v2.2.0 | 2026-11-17 | f77457d | Token image upload through `/api/upload` (Vercel Blob). Image link stored in the on-chain description. Token cards show the image for Blob links only. |
 | v2.1.0 | 2026-11-17 | (pending) | Queue for signed requests when the window is closed. Scheduled opening time banner. Automatic submission through `/api/process`. Status endpoint. `$` ticker display. Upstash Redis `reqo-queue` connected to reqo. |
 | v2.0.1 (docs) | 2026-11-17 | (pending) | Progress doc rewritten in neutral project voice. |
 | v2.0.0 (contracts) | 2026-11-17 | (pending) | MemeFactoryV2 deployed to diana (0xbEe5...d356). Relayed EIP-712 creation, nonces, deadlines, 18-decimal supply. 10/10 tests passed. Relayer endpoint added. Source and test script committed. |
@@ -203,7 +211,9 @@ Newest first.
 | I9 | Queued submissions go out one after another; nonce races are possible | One request may show error and need re-signing | Sequential submission; add nonce management later | Open |
 | I10 | Rate limit is held in memory | Resets when a serverless instance restarts | Move to KV counters | Open |
 | I11 | Vercel account billing address missing or incomplete | Possible restriction on paid features | Update in Vercel account settings | Open |
-| I12 | Token images not supported | Tokens have no image | Vercel Blob or IPFS upload, off-chain metadata | Open, Q10 |
+| I12 | Token images | Upload path built in v2.2.0 | Vercel Blob (D14) | **Built**, pending Blob store and live test |
+| I13 | Board sorting by market cap, hot, volume, and holders has no data source | Those chips are placeholders | Needs a price or trading source (swap work) | Open |
+| I14 | First push was rejected because the remote had a commit not in the local copy | Push blocked until pulled | `git pull --rebase origin main`, then push | Resolved for v2.2.0 by pull and push; confirm on each release |
 
 ## 12. Release Format
 
@@ -219,12 +229,21 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Add `CRON_SECRET` to Vercel and redeploy.
-2. Confirm KV variables are present in Vercel.
-3. Confirm `/api/status` returns `queueEnabled: true`, and `/api/process` returns 401 without the secret.
-4. Create the cron job for `/api/process` with the `x-cron-secret` header.
-5. Test the queue: sign a request while the window is closed, confirm it is queued, then open the window and confirm it is submitted within a minute.
-6. Decide D11 and Q9 (relayer account), and if changed, update lib/common.js and fund the account.
-7. Measure gas per creation and set `max_value` per session (Q7).
-8. Build token image upload (Q10, I12).
-9. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+1. Confirm `CRON_SECRET` and the Blob token are set in Vercel, then redeploy.
+2. Test the queue: sign while the window is closed, confirm it is queued, open the window, and confirm submission within a minute.
+3. Test image upload with a small PNG and confirm the token card shows the image.
+4. Decide the swap design (see section 14), then build it.
+5. Decide D11 and Q9 (relayer account).
+6. Measure gas per creation and set `max_value` per session (Q7).
+7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+
+## 14. Swap Design (decision pending)
+
+Swap is the next major feature. Two routes are possible:
+
+| Route | Description | Trade-off |
+|---|---|---|
+| A. Factory-created pool | Each token gets a constant-product pool deployed by the factory, with liquidity from the creator. | Fully on EVM, testable with Remix and the existing scripts. Needs contract work and liquidity seeding. |
+| B. Chain AMM module | Use QoreChain's native `amm` module, which the SDK exposes. | Possibly less contract work, but requires native transaction signing and a different frontend path. Unverified on testnet. |
+
+Decision needed before building: route A or route B.
