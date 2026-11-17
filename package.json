@@ -1,0 +1,8 @@
+{
+  "name": "reqo",
+  "version": "2.0.0",
+  "private": true,
+  "dependencies": {
+    "ethers": "6.13.2"
+  }
+}
