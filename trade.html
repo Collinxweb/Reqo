@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.8.0 trade -->
+<!-- version: v2.8.1 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
@@ -84,6 +84,7 @@ header .sp{flex:1}
     <input id="verifyHash" class="field" placeholder="0x transaction hash" style="margin-top:8px">
     <button class="ghost" id="verifyBtn">Verify on chain</button>
     <div class="verify" id="verifyOut" style="margin-top:8px"></div>
+    <a id="explorerLink" href="#" target="_blank" rel="noopener" style="display:none;margin-top:8px;font-weight:700;color:#0a7f6e">Open in QoreChain explorer</a>
   </div>
 </div>
 
@@ -280,8 +281,14 @@ async function trade() {
 }
 $("trade").onclick = trade;
 
+function explorerUrl(hash) {
+  return "https://dashboard.qorechain.io/explorer/tx/" + hash.replace(/^0x/, "").toUpperCase();
+}
+
 async function verify(hash) {
   $("verifyHash").value = hash;
+  $("explorerLink").href = explorerUrl(hash);
+  $("explorerLink").style.display = "inline-block";
   $("verifyOut").textContent = "Checking the chain...";
   let rc = null;
   for (let i = 0; i < 30 && !rc; i++) {
