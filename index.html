@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.3.0 -->
-<title>Reqo v2.3.0</title>
+<!-- version: v2.3.1 -->
+<title>Reqo v2.3.1</title>
 <link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
@@ -307,26 +307,40 @@ $("walletBtn").onclick = async () => {
   } catch (e) { toast(e.shortMessage || e.message); }
 };
 
+let imageReady = null;
 $("image").onchange = () => {
   const f = $("image").files[0];
+  imageReady = null;
   if (!f) { $("prevBox").innerHTML = "No image"; return; }
+  if (f.size > 1024 * 1024) { setStatus("Image must be under 1 MB"); $("image").value = ""; return; }
   $("prevBox").innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
+  imageReady = fileToBase64(f).then(data => ({ file: f, data })).catch(e => ({ file: f, error: e.message }));
+  imageReady.then(r => { if (r.error) setStatus("Image error: " + r.error); });
 };
 
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => resolve(fr.result.split(",")[1]);
-    fr.onerror = () => reject(new Error("could not read the image"));
-    fr.readAsDataURL(file);
-  });
+async function fileToBase64(file) {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let bin = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(bin);
+  } catch (e) {
+    return new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result.split(",")[1]);
+      fr.onerror = () => reject(new Error("browser could not read the file (" + (fr.error ? fr.error.name : "unknown") + "). Choose the image again."));
+      fr.readAsDataURL(file);
+    });
+  }
 }
-async function uploadImage(file) {
+async function uploadImage(file, cachedData) {
   if (file.size > 1024 * 1024) throw new Error("Image must be under 1 MB");
   const r = await fetch("/api/upload", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contentType: file.type, data: await fileToBase64(file) })
+    body: JSON.stringify({ contentType: file.type, data: cachedData || await fileToBase64(file) })
   });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || "image upload failed");
@@ -404,7 +418,10 @@ $("create").onclick = async () => {
     const file = $("image").files[0];
     if (file) {
       setStatus("Uploading image...");
-      description = (description ? description + " " : "") + "img:" + await uploadImage(file);
+      const cached = imageReady ? await imageReady : null;
+      if (cached && cached.error) throw new Error(cached.error);
+      const cachedData = cached && cached.file === file ? cached.data : null;
+      description = (description ? description + " " : "") + "img:" + await uploadImage(file, cachedData);
     }
     if (new TextEncoder().encode(description).length > 280)
       throw new Error("Description plus image link must be at most 280 bytes. Shorten the description.");

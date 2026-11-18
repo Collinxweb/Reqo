@@ -14,6 +14,8 @@ Reqo is a memecoin launchpad on QoreChain testnet (Diana). Users create tokens f
 - **v2** (Solidity, deployed and tested): users sign a creation request off chain, and a relayer submits it. The signer is recorded as creator, so users need no window. Supply uses 18 decimals.
 - **v2.1.0** (frontend and API): when the relayer window is closed, signed requests are queued and submitted automatically once it opens. The page shows the planned opening time and displays tickers with a `$` prefix.
 - **v2.2.0** (API and frontend): token images. The image is uploaded to Vercel Blob, and its link is stored inside the on-chain description as `img:<url>`.
+- **v2.3.1** (frontend fix): the image is read as soon as it is chosen and cached, so a file the browser has released no longer fails the launch. The exact browser read error is shown on the page.
+- **v3 launch path** (contracts, live on Diana): WQOR, MemeTokenV3, PoolV3 and MemeFactoryV3 are deployed. A launch creates a token whose full supply and a 10 WQOR seed sit in a constant-product pool. Quote math and seeding are verified on chain.
 - **v2.3.0** (frontend): Nearly-style mobile layout with Board, Launch, and More tabs, the Reqo logo, and coming-soon placeholders for features not yet built.
 
 A real wallet with no window of its own has created a token through the v2 relayer (see section 5). Queued submission is built but not yet tested.
@@ -83,6 +85,24 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 - EIP-712 domain: name "Reqo MemeFactory", version "2", chainId 9800, verifyingContract = factory address.
 
 **Checks in code:** name 1 to 32 bytes, symbol 1 to 10 bytes, supply greater than 0 and at most 1e12 whole tokens, description at most 280 bytes, deadline not passed, nonce not used, signer equals creator.
+
+### v3 (Diana, live)
+
+| Item | Value | Status |
+|---|---|---|
+| WQOR (wrapped QOR) | 0xF78c2cC7dc1B9ae52403868dD2097732Abfca665 | [verified] deployed; deposit and balanceOf confirmed in a Remix run before the chain deploy |
+| WQOR deploy tx | 0x1b1634c055c8f52e6722ee002b0c5d42a6f06148e7e99eaf5289a43fa287c06b | [verified] |
+| MemeFactoryV3 | 0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f | [verified] deployed with the WQOR address above |
+| MemeFactoryV3 deploy tx | 0x82400ae4089f2c467c43de9a35b23fef88f466bb948b7d99ab8305d6814b133f | [verified] |
+| Launch test token (v3) | 0xa2FAD0D37996529f758fEc6fe295c5e961d6fD00 | [verified] 1000 tokens, created by the owner account |
+| Launch pool (v3) | 0x97247263A1Ed75005d2a927DfC5e7002266c80E7 | [verified] seeded = true, tokenReserve = 1000, wqorReserve = 10 |
+| Quote check | buy 1 WQOR returns 90.661089388 tokens | [verified] matches the independent constant-product calculation with the 0.3% fee |
+
+**Known limits (v3):**
+- The 0.3% swap fee stays in the pool. Nobody can withdraw liquidity.
+- The 10 WQOR seed is paid by the sender of each launch. For relayed launches, that is the relayer.
+- Signed swap execution (`swap` with a trader signature and permit) is compiled but not yet tested on Diana.
+- Not audited.
 
 **Known limits (v2):**
 - Anyone with gas can submit a valid signed request. The relayer pays gas and the signer owns the token.
@@ -161,6 +181,8 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D14 | Token images stored in Vercel Blob, with the link inside the on-chain description as `img:<url>` | No contract change or redeploy. The link is verifiable on chain. Costs description bytes (280 total). | **Implemented** (v2.2.0), not yet tested live |
 | D16 | Relayer windows are scheduled for 01:00 and 13:00 UTC, five hours each | Gives testers and judges predictable test slots in both UTC halves of the day. | **Implemented** (v2.4.0) |
 | D17 | Window opening stays manual in QoreX until a server-side signing route is verified | The ML-DSA-87 key is not stored on Vercel (D10). Opening is a signed on-chain action that has not been verified from a server. | Accepted for judging sessions |
+| D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
+| D19 | Image bytes are read when the file is chosen, not at submit time | Prevents the browser from releasing the file before launch and failing with a read error. | **Implemented** (v2.3.1) |
 | D15 | Board and Launch as the main UI, in a mobile layout. Features not built show as coming soon. | Judges see only live features. Roadmap items stay visible without implying they work. | **Implemented** (v2.3.0) |
 
 ## 9. Open Questions
@@ -187,6 +209,9 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.5.0 (docs and v3) | 2026-11-18 | (pending) | Progress doc covers the v3 launch path (WQOR, MemeFactoryV3, pool seeding, quote check) and the v2.3.1 image fix. |
+| v2.3.1 | 2026-11-18 | (pending) | Launch reads the image on selection and caches it. Shows the browser's exact read error. |
+| v3 contracts | 2026-11-18 | n/a | WQOR, MemeFactoryV3 deployed to Diana. Test launch: pool seeded with 1000 tokens and 10 WQOR. Quote verified. |
 | v2.4.0 | 2026-11-17 | (pending) | Scheduled relayer windows at 01:00 and 13:00 UTC, each planned for five hours. The next planned opening is calculated automatically; a KV override still works for one-off changes. Window opening remains manual. |
 | v2.3.0 | 2026-11-17 | (pending) | Nearly-style mobile layout: Board (live token list with search and newest-first sorting), Launch (live creation with image upload and queued submission), More. Reqo logo added. Feed, Portfolio, Swap, Market cap, Hot, Volume, and Holders show as coming soon. |
 | v2.2.0 | 2026-11-17 | f77457d | Token image upload through `/api/upload` (Vercel Blob). Image link stored in the on-chain description. Token cards show the image for Blob links only. |
@@ -217,6 +242,8 @@ Newest first.
 | I11 | Vercel account billing address missing or incomplete | Possible restriction on paid features | Update in Vercel account settings | Open |
 | I12 | Token images | Upload path built in v2.2.0 | Vercel Blob (D14) | **Built**, pending Blob store and live test |
 | I13 | Board sorting by market cap, hot, volume, and holders has no data source | Those chips are placeholders | Needs a price or trading source (swap work) | Open |
+| I15 | Launch failed with "could not read the image" when the file was read after wallet and status calls | Launch blocked | Read the file on selection and cache it (D19) | **Fixed** in v2.3.1, pending live test |
+| I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | Open, next step |
 | I14 | First push was rejected because the remote had a commit not in the local copy | Push blocked until pulled | `git pull --rebase origin main`, then push | Resolved for v2.2.0 by pull and push; confirm on each release |
 
 ## 12. Release Format
@@ -233,16 +260,14 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Confirm `CRON_SECRET` and the Blob token are set in Vercel, then redeploy.
-2. Test the queue: sign while the window is closed, confirm it is queued, open the window, and confirm submission within a minute.
-3. Test image upload with a small PNG and confirm the token card shows the image.
-4. Open windows manually at about 00:55 and 12:55 UTC for each session (D17).
-5. Build the swap feature on route A (see section 14).
-6. Decide D11 and Q9 (relayer account), and verify Q13 before automating window opening.
-7. Measure gas per creation and set `max_value` per session (Q7).
-8. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+1. Live test the v2.3.1 launch with a PNG, confirm the token card shows the image.
+2. Test signed swaps on Diana: a throwaway trader signs a permit and an intent, the owner relayer submits `swap`, and the test checks the trader's balance, the replay rejection, and the expired-intent rejection.
+3. Add the Trade view to the page once the swap test passes, with the quote from `quoteOut` and a signed intent with a slippage limit.
+4. Rerun the v3 launch through the relayer path (`createTokenFor`) before any public launch.
+5. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
+6. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
-## 14. Swap Design (decision pending)
+## 14. Swap Design (route A in use)
 
 Swap is the next major feature. Two routes are possible:
 
@@ -251,4 +276,4 @@ Swap is the next major feature. Two routes are possible:
 | A. Factory-created pool | Each token gets a constant-product pool deployed by the factory, with liquidity from the creator. | Fully on EVM, testable with Remix and the existing scripts. Needs contract work and liquidity seeding. |
 | B. Chain AMM module | Use QoreChain's native `amm` module, which the SDK exposes. | Possibly less contract work, but requires native transaction signing and a different frontend path. Unverified on testnet. |
 
-Decision needed before building: route A or route B.
+Route A is in use: a constant-product pool created per token by the v3 factory. Route B was not pursued.
