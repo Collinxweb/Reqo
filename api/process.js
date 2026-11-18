@@ -27,7 +27,7 @@ module.exports = async (req, res) => {
     if (!win.live) return res.status(200).json({ processed: 0, windowLive: false });
 
     const now = Math.floor(Date.now() / 1000);
-    const { factory } = C.relayerFactory();
+    const { wallet, factory } = C.relayerFactory();
     const ids = (await C.queuedIds()).slice(0, 5);
     const results = [];
 
@@ -50,6 +50,7 @@ module.exports = async (req, res) => {
         const r = rec.request;
         if (C.verify(r, rec.signature) !== r.creator) throw new Error("bad signature");
         if (await factory.nonceUsed(r.creator, r.nonce)) throw new Error("nonce used");
+        await C.ensureSeed(wallet);
         const tx = await factory.createTokenFor(r, rec.signature);
         rec.status = "submitted";
         rec.txHash = tx.hash;

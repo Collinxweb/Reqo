@@ -45,7 +45,7 @@ module.exports = async (req, res) => {
       if (existing) return res.status(200).json(C.publicView(id, existing));
     }
 
-    const { factory } = C.relayerFactory();
+    const { wallet, factory } = C.relayerFactory();
     if (await factory.nonceUsed(r.creator, r.nonce)) throw new Error("nonce used");
 
     if (!rateOk(r.creator.toLowerCase()))
@@ -62,6 +62,7 @@ module.exports = async (req, res) => {
       return res.status(202).json({ ...C.publicView(id, rec), opensAt });
     }
 
+    await C.ensureSeed(wallet);
     const tx = await factory.createTokenFor(r, sig);
     if (C.queueEnabled()) {
       await C.putRecord(id, { status: "submitted", txHash: tx.hash, deadline: Number(r.deadline) });

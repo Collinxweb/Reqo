@@ -155,7 +155,7 @@ nav button.on .ic{color:var(--teal)}
 <div class="toast" id="toast"></div>
 
 <script>
-const FACTORY = "0xbEe5D528b86fDe7bd68a1330B4A76E838390d356";
+const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
 const RPC = "https://evm-testnet.qore.host";
 const CHAIN_ID = 9800;
 const CHAIN_HEX = "0x" + CHAIN_ID.toString(16);
@@ -169,7 +169,7 @@ const TOKEN_ABI = [
   "function creator() view returns (address)",
   "function description() view returns (string)"
 ];
-const domain = { name: "Reqo MemeFactory", version: "2", chainId: CHAIN_ID, verifyingContract: FACTORY };
+const domain = { name: "Reqo MemeFactory", version: "3", chainId: CHAIN_ID, verifyingContract: FACTORY };
 const types = {
   CreateToken: [
     { name: "creator", type: "address" },
@@ -373,7 +373,21 @@ function checkInputs(r) {
   const s = BigInt(r.supply);
   if (s < 1n || s > 1000000000000n) throw new Error("Supply must be between 1 and 1000000000000");
 }
-function setStatus(t) { $("status").textContent = t; }
+function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.replace(/^0x/, "").toUpperCase(); }
+function setStatus(t) {
+  const el = $("status");
+  el.textContent = "";
+  let last = 0;
+  for (const m of String(t).matchAll(/0x[0-9a-fA-F]{64}/g)) {
+    el.append(document.createTextNode(String(t).slice(last, m.index)));
+    const a = document.createElement("a");
+    a.href = explorerUrl(m[0]); a.target = "_blank"; a.rel = "noopener"; a.textContent = m[0];
+    a.style.color = "#0a7f6e"; a.style.fontWeight = "700";
+    el.append(a);
+    last = m.index + m[0].length;
+  }
+  el.append(document.createTextNode(String(t).slice(last)));
+}
 function fmtTime(iso) { return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
 
 function pollRequest(id) {

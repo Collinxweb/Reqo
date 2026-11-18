@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.8.1 trade -->
+<!-- version: v2.9.0 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
@@ -45,7 +45,8 @@ header .sp{flex:1}
   </header>
 
   <div class="card" id="tokenCard">
-    <div class="muted" id="noToken">No token selected. Open a token from the Board.</div>
+    <div class="muted" id="noToken">No token selected.</div>
+    <select id="pick" class="field" style="display:none;margin-top:8px"></select>
     <div id="tokenInfo" style="display:none">
       <div style="font-size:18px;font-weight:800" id="tName"></div>
       <div style="color:var(--teal);font-weight:800" id="tTicker"></div>
@@ -94,7 +95,11 @@ const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
 const RPC = "https://evm-testnet.qore.host";
 const CHAIN_ID = 9800;
 const CHAIN_HEX = "0x" + CHAIN_ID.toString(16);
-const FACTORY_ABI = ["function poolOf(address) view returns (address)"];
+const FACTORY_ABI = [
+  "function poolOf(address) view returns (address)",
+  "function tokenCount() view returns (uint256)",
+  "function tokens(uint256) view returns (address)",
+];
 const POOL_ABI = [
   "function token() view returns (address)",
   "function tokenReserve() view returns (uint256)",
@@ -123,7 +128,21 @@ const SWAP_IFACE = new ethers.Interface([
 ]);
 
 const $ = (id) => document.getElementById(id);
-const setStatus = (t) => { $("status").textContent = t; };
+function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.replace(/^0x/, "").toUpperCase(); }
+function setStatus(t) {
+  const el = $("status");
+  el.textContent = "";
+  let last = 0;
+  for (const m of String(t).matchAll(/0x[0-9a-fA-F]{64}/g)) {
+    el.append(document.createTextNode(String(t).slice(last, m.index)));
+    const a = document.createElement("a");
+    a.href = explorerUrl(m[0]); a.target = "_blank"; a.rel = "noopener"; a.textContent = m[0];
+    a.style.color = "#0a7f6e"; a.style.fontWeight = "700";
+    el.append(a);
+    last = m.index + m[0].length;
+  }
+  el.append(document.createTextNode(String(t).slice(last)));
+}
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
 const token = new URLSearchParams(location.search).get("token");
 let pool = null, mode = "buy", tokenSymbol = "", tokenName = "", poolC = null;
@@ -149,8 +168,28 @@ async function getSigner() {
   return p.getSigner();
 }
 
+async function listTokens() {
+  const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
+  const n = Number(await fac.tokenCount());
+  const sel = $("pick");
+  sel.innerHTML = "";
+  const first = document.createElement("option");
+  first.value = ""; first.textContent = "Choose a token";
+  sel.append(first);
+  for (let i = 0; i < n; i++) {
+    const addr = await fac.tokens(i);
+    const t = new ethers.Contract(addr, PERMIT_ABI, reader);
+    const o = document.createElement("option");
+    o.value = addr; o.textContent = "$" + (await t.symbol());
+    sel.append(o);
+  }
+  $("noToken").textContent = n ? "Choose a token to trade." : "No tokens yet. Launch one first.";
+  sel.style.display = n ? "block" : "none";
+  sel.onchange = () => { if (sel.value) location.search = "?token=" + sel.value; };
+}
+
 async function init() {
-  if (!token) return;
+  if (!token) { await listTokens(); return; }
   try {
     const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
     pool = await fac.poolOf(token);
