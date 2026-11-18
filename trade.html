@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!-- version: v2.8.0 trade -->
+<title>Reqo Trade</title>
+<link rel="icon" href="logo.png">
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+<style>
+:root{--teal:#0bbfa6;--ink:#0d1b1a;--muted:#5f716d;--bg:#e8f3f1;--card:#fff;--line:#d5e6e2;--bad:#b23b3b}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+.wrap{max-width:480px;margin:0 auto;padding:12px}
+header{display:flex;align-items:center;gap:10px;padding:6px 0 12px}
+header img{width:34px;height:34px;border-radius:8px}
+header .brand{font-weight:800;font-size:20px}
+header .brand span{color:var(--teal)}
+header .sp{flex:1}
+.btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;text-decoration:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.lbl{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.3px;margin:10px 0 4px}
+.field{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);font-size:16px;background:#fff}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer}
+.seg button.on{background:var(--teal);border-color:var(--teal);color:#fff}
+.row{display:flex;justify-content:space-between;font-size:14px;padding:5px 0}
+.muted{color:var(--muted)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
+.go{width:100%;padding:14px;border-radius:14px;border:0;background:var(--teal);color:#fff;font-size:16px;font-weight:800;cursor:pointer;margin-top:8px}
+.go:disabled{opacity:.5}
+.ghost{width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;margin-top:6px}
+.status{font-size:14px;margin:10px 2px;min-height:20px;word-break:break-all}
+.verify{white-space:pre-wrap;font-size:13px;background:#f6fbfa;border:1px dashed var(--line);border-radius:12px;padding:10px;min-height:40px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="logo.png" alt="Reqo">
+    <div class="brand">Re<span>qo</span></div>
+    <div class="sp"></div>
+    <a class="btn" href="./">Board</a>
+    <button class="btn" id="walletBtn">Connect</button>
+  </header>
+
+  <div class="card" id="tokenCard">
+    <div class="muted" id="noToken">No token selected. Open a token from the Board.</div>
+    <div id="tokenInfo" style="display:none">
+      <div style="font-size:18px;font-weight:800" id="tName"></div>
+      <div style="color:var(--teal);font-weight:800" id="tTicker"></div>
+      <div class="row"><span class="muted">Pool reserves</span><span id="reserves">-</span></div>
+      <div class="row"><span class="muted">Price</span><span id="price">-</span></div>
+      <div class="row"><span class="muted">Your WQOR</span><span id="myWqor">-</span></div>
+      <div class="row"><span class="muted">Your tokens</span><span id="myTok">-</span></div>
+    </div>
+  </div>
+
+  <div class="card" id="tradeCard" style="display:none">
+    <div class="seg">
+      <button id="modeBuy" class="on">Buy with WQOR</button>
+      <button id="modeSell">Sell for WQOR</button>
+    </div>
+    <div class="lbl" id="amtLbl">AMOUNT (WQOR)</div>
+    <input id="amount" class="field" inputmode="decimal" placeholder="0.0">
+    <div class="lbl">MAX SLIPPAGE</div>
+    <select id="slip" class="field">
+      <option value="1">1%</option>
+      <option value="3" selected>3%</option>
+      <option value="5">5%</option>
+    </select>
+    <div class="row" style="margin-top:10px"><span class="muted">You get (estimate)</span><span id="quote">-</span></div>
+    <div class="row"><span class="muted">Minimum you receive</span><span id="minOut">-</span></div>
+    <button class="ghost" id="getWqor" style="display:none">Get 5 WQOR allowance</button>
+    <button class="go" id="trade">Trade</button>
+    <div class="muted" style="font-size:12px;margin-top:8px">You sign a permit and a trade request. Signing is free. The relayer submits the trade, so you need no gas and no window.</div>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div class="card">
+    <div style="font-weight:800;margin-bottom:6px">Verify a transaction</div>
+    <div class="muted" style="font-size:13px">This reads the chain directly from the network RPC, not from our server.</div>
+    <input id="verifyHash" class="field" placeholder="0x transaction hash" style="margin-top:8px">
+    <button class="ghost" id="verifyBtn">Verify on chain</button>
+    <div class="verify" id="verifyOut" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script>
+const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
+const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
+const RPC = "https://evm-testnet.qore.host";
+const CHAIN_ID = 9800;
+const CHAIN_HEX = "0x" + CHAIN_ID.toString(16);
+const FACTORY_ABI = ["function poolOf(address) view returns (address)"];
+const POOL_ABI = [
+  "function token() view returns (address)",
+  "function tokenReserve() view returns (uint256)",
+  "function wqorReserve() view returns (uint256)",
+  "function quoteOut(bool buy, uint256 amountIn) view returns (uint256)",
+  "function seeded() view returns (bool)",
+];
+const PERMIT_ABI = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function balanceOf(address) view returns (uint256)",
+  "function nonces(address) view returns (uint256)",
+];
+const INTENT_TYPES = { Swap: [
+  { name: "trader", type: "address" }, { name: "buy", type: "bool" },
+  { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" },
+  { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" },
+] };
+const PERMIT_TYPES = { Permit: [
+  { name: "owner", type: "address" }, { name: "spender", type: "address" },
+  { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" },
+  { name: "deadline", type: "uint256" },
+] };
+const SWAP_IFACE = new ethers.Interface([
+  "event Swapped(address indexed trader, bool buy, uint256 amountIn, uint256 amountOut)",
+]);
+
+const $ = (id) => document.getElementById(id);
+const setStatus = (t) => { $("status").textContent = t; };
+const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
+const token = new URLSearchParams(location.search).get("token");
+let pool = null, mode = "buy", tokenSymbol = "", tokenName = "", poolC = null;
+
+function poolDomain() { return { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool }; }
+
+async function getSigner() {
+  if (!window.ethereum) throw new Error("Open this page in a wallet browser.");
+  let p = new ethers.BrowserProvider(window.ethereum);
+  await p.send("eth_requestAccounts", []);
+  const net = await p.getNetwork();
+  if (Number(net.chainId) !== CHAIN_ID) {
+    try { await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]); }
+    catch (e) {
+      const code = e.code ?? (e.info && e.info.error && e.info.error.code);
+      if (code === 4902) {
+        await p.send("wallet_addEthereumChain", [{ chainId: CHAIN_HEX, chainName: "QoreChain Diana Testnet",
+          nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: [RPC] }]);
+      } else throw e;
+    }
+    p = new ethers.BrowserProvider(window.ethereum);
+  }
+  return p.getSigner();
+}
+
+async function init() {
+  if (!token) return;
+  try {
+    const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
+    pool = await fac.poolOf(token);
+    if (pool === ethers.ZeroAddress) { setStatus("This token has no pool on the v3 factory."); return; }
+    poolC = new ethers.Contract(pool, POOL_ABI, reader);
+    const tk = new ethers.Contract(token, PERMIT_ABI, reader);
+    tokenName = await tk.name();
+    tokenSymbol = await tk.symbol();
+    $("noToken").style.display = "none";
+    $("tokenInfo").style.display = "block";
+    $("tradeCard").style.display = "block";
+    $("tName").textContent = tokenName;
+    $("tTicker").textContent = "$" + tokenSymbol;
+    $("amtLbl").textContent = mode === "buy" ? "AMOUNT (WQOR)" : "AMOUNT (" + tokenSymbol + ")";
+    await refresh();
+    setInterval(refresh, 20000);
+  } catch (e) { setStatus("Could not load the token: " + (e.shortMessage || e.message)); }
+}
+
+async function refresh() {
+  if (!poolC) return;
+  const tr = await poolC.tokenReserve();
+  const wr = await poolC.wqorReserve();
+  $("reserves").textContent = Number(ethers.formatUnits(tr, 18)).toLocaleString() + " " + tokenSymbol + " / " + Number(ethers.formatUnits(wr, 18)).toLocaleString() + " WQOR";
+  $("price").textContent = tr > 0n ? (Number(ethers.formatUnits(wr, 18)) / Number(ethers.formatUnits(tr, 18))).toFixed(8) + " WQOR per " + tokenSymbol : "-";
+  const accts = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
+  if (accts.length) {
+    const me = accts[0];
+    const w = new ethers.Contract(WQOR, PERMIT_ABI, reader);
+    const t = new ethers.Contract(token, PERMIT_ABI, reader);
+    const wb = await w.balanceOf(me), tb = await t.balanceOf(me);
+    $("walletBtn").textContent = me.slice(0, 6) + "..." + me.slice(-4);
+    $("myWqor").textContent = Number(ethers.formatUnits(wb, 18)).toLocaleString() + " WQOR";
+    $("myTok").textContent = Number(ethers.formatUnits(tb, 18)).toLocaleString() + " " + tokenSymbol;
+    $("getWqor").style.display = mode === "buy" && wb === 0n ? "block" : "none";
+  }
+  await updateQuote();
+}
+
+async function updateQuote() {
+  const s = $("amount").value.trim();
+  if (!poolC || !/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("quote").textContent = "-"; $("minOut").textContent = "-"; return; }
+  const amountIn = ethers.parseUnits(s, 18);
+  const out = await poolC.quoteOut(mode === "buy", amountIn);
+  const minOut = out * (100n - BigInt($("slip").value)) / 100n;
+  $("quote").textContent = Number(ethers.formatUnits(out, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 }) + " " + (mode === "buy" ? tokenSymbol : "WQOR");
+  $("minOut").textContent = Number(ethers.formatUnits(minOut, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 }) + " " + (mode === "buy" ? tokenSymbol : "WQOR");
+}
+
+function setMode(m) {
+  mode = m;
+  $("modeBuy").classList.toggle("on", m === "buy");
+  $("modeSell").classList.toggle("on", m === "sell");
+  $("amtLbl").textContent = m === "buy" ? "AMOUNT (WQOR)" : "AMOUNT (" + tokenSymbol + ")";
+  refresh();
+}
+$("modeBuy").onclick = () => setMode("buy");
+$("modeSell").onclick = () => setMode("sell");
+$("amount").oninput = updateQuote;
+$("slip").onchange = updateQuote;
+
+$("walletBtn").onclick = async () => { try { await getSigner(); await refresh(); } catch (e) { setStatus(e.message); } };
+
+async function getWqor() {
+  const btn = $("getWqor"); btn.disabled = true;
+  try {
+    const signer = await getSigner();
+    const address = await signer.getAddress();
+    setStatus("Requesting WQOR allowance...");
+    const r = await fetch("/api/faucet", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "faucet error " + r.status);
+    setStatus("WQOR allowance sent: " + j.txHash);
+    await verify(j.txHash);
+    await refresh();
+  } catch (e) { setStatus("Error: " + (e.shortMessage || e.message)); }
+  finally { btn.disabled = false; }
+}
+$("getWqor").onclick = getWqor;
+
+async function trade() {
+  const btn = $("trade"); btn.disabled = true;
+  try {
+    const s = $("amount").value.trim();
+    if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) throw new Error("Enter an amount above zero");
+    const amountIn = ethers.parseUnits(s, 18);
+    const signer = await getSigner();
+    const trader = await signer.getAddress();
+    const buy = mode === "buy";
+    const quote = await poolC.quoteOut(buy, amountIn);
+    const minOut = quote * (100n - BigInt($("slip").value)) / 100n;
+    const now = Math.floor(Date.now() / 1000);
+    const intent = { trader, buy, amountIn, minOut, nonce: BigInt(Date.now()), deadline: BigInt(now + 900) };
+
+    const inToken = buy ? WQOR : token;
+    const inMeta = new ethers.Contract(inToken, PERMIT_ABI, reader);
+    const inName = await inMeta.name();
+    const nonce = await inMeta.nonces(trader);
+    const permitDeadline = BigInt(now + 900);
+
+    setStatus("Sign the permit in your wallet (no gas).");
+    const permitSig = ethers.Signature.from(await signer.signTypedData(
+      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inToken },
+      PERMIT_TYPES,
+      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline }
+    ));
+
+    setStatus("Sign the trade request in your wallet (no gas).");
+    const intentSig = await signer.signTypedData(poolDomain(), INTENT_TYPES, intent);
+
+    setStatus("Sending to relayer...");
+    const r = await fetch("/api/swap", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token, pool,
+        intent: { trader, buy, amountIn: amountIn.toString(), minOut: minOut.toString(), nonce: intent.nonce.toString(), deadline: intent.deadline.toString() },
+        intentSig,
+        permit: { deadline: permitDeadline.toString(), v: permitSig.v, r: permitSig.r, s: permitSig.s },
+      }),
+    });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
+    setStatus("Submitted: " + j.txHash);
+    await verify(j.txHash);
+    await refresh();
+  } catch (e) { setStatus("Error: " + (e.shortMessage || e.message)); }
+  finally { btn.disabled = false; }
+}
+$("trade").onclick = trade;
+
+async function verify(hash) {
+  $("verifyHash").value = hash;
+  $("verifyOut").textContent = "Checking the chain...";
+  let rc = null;
+  for (let i = 0; i < 30 && !rc; i++) {
+    rc = await reader.getTransactionReceipt(hash);
+    if (!rc) await new Promise((r) => setTimeout(r, 3000));
+  }
+  if (!rc) { $("verifyOut").textContent = "Not found on chain yet. Press Verify on chain again in a minute."; return; }
+  const lines = [
+    "status: " + (rc.status === 1 ? "success" : "failed"),
+    "block: " + rc.blockNumber,
+    "from: " + rc.from,
+    "to: " + rc.to,
+  ];
+  for (const log of rc.logs) {
+    try {
+      const ev = SWAP_IFACE.parseLog(log);
+      if (ev) lines.push("Swapped on " + log.address + ": trader " + ev.args.trader +
+        ", buy " + ev.args.buy +
+        ", in " + ethers.formatUnits(ev.args.amountIn, 18) +
+        ", out " + ethers.formatUnits(ev.args.amountOut, 18));
+    } catch (_) {}
+  }
+  $("verifyOut").textContent = lines.join("\n");
+}
+$("verifyBtn").onclick = () => {
+  const h = $("verifyHash").value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) { $("verifyOut").textContent = "Enter a 0x transaction hash (64 hex characters)."; return; }
+  verify(h).catch((e) => { $("verifyOut").textContent = "Verify failed: " + e.message; });
+};
+
+init();
+</script>
+</body>
+</html>

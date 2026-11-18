@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.3.3 -->
-<title>Reqo v2.3.3</title>
+<!-- version: v2.8.0 -->
+<title>Reqo v2.8.0</title>
 <link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
@@ -127,7 +127,7 @@ nav button.on .ic{color:var(--teal)}
 <section id="view-more" style="display:none" class="more">
   <div class="card">
     <h3>Reqo</h3>
-    <div class="item"><span>Version</span><span class="muted">v2.3.3 (testnet)</span></div>
+    <div class="item"><span>Version</span><span class="muted">v2.8.0 (testnet)</span></div>
     <div class="item"><span>Network</span><span class="muted">QoreChain Diana, chain 9800</span></div>
     <div class="item"><span>Factory</span><span class="muted" style="word-break:break-all">0xbEe5...d356</span></div>
     <div class="item"><span>Documentation</span><a href="docs.html">Open docs</a></div>
@@ -135,7 +135,7 @@ nav button.on .ic{color:var(--teal)}
   </div>
   <div class="card">
     <h3>Coming soon</h3>
-    <div class="item"><span>Trade screen (swap contracts verified on testnet)</span><span class="soon">SOON</span></div>
+    <div class="item"><span>Trade</span><span class="muted">Open a token on the Board</span></div>
     <div class="item"><span>Live feed</span><span class="soon">SOON</span></div>
     <div class="item"><span>Portfolio</span><span class="soon">SOON</span></div>
     <div class="item"><span>AI trading agent</span><span class="soon">SOON</span></div>
@@ -280,7 +280,7 @@ function render() {
     const avatar = t.img
       ? `<img src="${esc(t.img)}" alt="">`
       : esc((t.symbol[0] || "?").toUpperCase());
-    return `<div class="row">
+    return `<a class="row" href="trade.html?token=${esc(t.addr)}" style="text-decoration:none;color:inherit">
       <div class="avatar">${avatar}</div>
       <div class="info">
         <div class="name">${esc(t.name)}</div>
@@ -292,7 +292,7 @@ function render() {
         <div class="big">${esc(Number(t.supply).toLocaleString())}</div>
         <div class="tiny">supply</div>
       </div>
-    </div>`;
+    </a>`;
   }).join("");
 }
 $("q").oninput = render;

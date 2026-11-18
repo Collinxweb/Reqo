@@ -184,6 +184,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D16 | Relayer windows are scheduled for 01:00 and 13:00 UTC, five hours each | Gives testers and judges predictable test slots in both UTC halves of the day. | **Implemented** (v2.4.0) |
 | D17 | Window opening stays manual in QoreX until a server-side signing route is verified | The ML-DSA-87 key is not stored on Vercel (D10). Opening is a signed on-chain action that has not been verified from a server. | Accepted for judging sessions |
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
+| D23 | Trades are verified from the chain by the browser, reading the RPC directly and decoding the pool's `Swapped` event | A transaction hash can be checked without trusting our server. | **Implemented** (v2.8.0), pending live test |
 | D22 | Public traders receive a 5 WQOR allowance from the relayer account, capped at 5 WQOR per address | Traders can trade without a window or gas. Cap limits how much relayer WQOR one address can take. | **Implemented** (v2.7.0), pending live test |
 | D21 | Swaps are signed off chain and relayed; the pool checks the intent's minimum output, deadline, nonce, and signer | Traders need no window and no gas. The owner relayer cannot change amount or minimum. | **Implemented and verified** (v3 swap test on Diana, 8/8) |
 | D20 | A finished launch dims the Launch button and returns to the Board; a failed or expired queued launch re-enables it | Prevents duplicate launches and shows the result in the token list. | **Implemented** (v2.3.2) |
@@ -216,6 +217,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.8.0 | 2026-11-18 | (pending) | Trade page (`trade.html`): buy and sell on a token's pool, 1/3/5% slippage, WQOR allowance button, signed permit and trade request, relayed swap (`/api/swap`), and an on-chain verifier that reads the RPC directly. Board cards link to the Trade page. More tab shows Trade as available. |
 | v2.7.0 | 2026-11-18 | (pending) | WQOR faucet endpoint (`/api/faucet`): sends up to 5 WQOR per address from the relayer account, requires the window to be live, rate limited per network. Public docs page added at `docs.html`. |
 | v2.6.0 (docs) | 2026-11-18 | (pending) | Signed swap verified on Diana: 8 of 8 checks. Pool reserves and trader balance match the quote. Trade view and public WQOR source are next. |
 | v2.5.1 (docs) | 2026-11-18 | (pending) | Launch button dims after a launch is submitted or queued, and the page returns to the Board. Re-enabled if a queued launch expires or fails. Image storage (Vercel Blob) connected by the project owner. |
@@ -256,6 +258,7 @@ Newest first.
 | I15 | Launch failed with "could not read the image" when the file was read after wallet and status calls | Launch blocked | Read the file on selection and cache it (D19) | **Fixed** in v2.3.1, pending live test |
 | I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
+| I19 | No public block explorer link is set; verification uses the RPC | Judges need an explorer link to check hashes | Add the explorer URL when the QoreChain explorer address is confirmed | Open |
 | I18 | Public traders have no WQOR source | Trade view cannot be used by testers yet | Relayer-funded allowance (D22) | **Built** in v2.7.0, pending live test |
 | I14 | First push was rejected because the remote had a commit not in the local copy | Push blocked until pulled | `git pull --rebase origin main`, then push | Resolved for v2.2.0 by pull and push; confirm on each release |
 
@@ -273,12 +276,13 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the WQOR faucet: request an allowance from a fresh address, confirm the transfer, then confirm a second request is refused at the cap.
-2. Build the swap relayer endpoint (`/api/swap`) and the Trade view on the page: quote from `quoteOut`, a slippage limit, a permit and intent signed by the trader, and a post to the relayer.
-3. Live test the v2.3.2 launch with a PNG, confirm the button dims, the page returns to the Board, and the token card shows the image.
-4. Rerun the v3 launch through the relayer path (`createTokenFor`) before any public launch.
-5. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
-6. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+1. Live test the Trade page: fund a fresh address with the faucet, buy from the pool, confirm the trade hash verifies with the on-chain check, then sell back and verify.
+2. Confirm the QoreChain explorer address and add an explorer link next to each verified hash (I19).
+3. Live test the WQOR faucet cap (second request refused) and the swap relayer refusals (replay, expired, wrong signer).
+4. Live test the v2.3.2 launch with a PNG, confirm the button dims, the page returns to the Board, and the token card shows the image.
+5. Rerun the v3 launch through the relayer path (`createTokenFor`) before any public launch.
+6. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
+7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
 ## 14. Swap Design (route A in use)
 
