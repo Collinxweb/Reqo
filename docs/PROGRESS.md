@@ -182,6 +182,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D16 | Relayer windows are scheduled for 01:00 and 13:00 UTC, five hours each | Gives testers and judges predictable test slots in both UTC halves of the day. | **Implemented** (v2.4.0) |
 | D17 | Window opening stays manual in QoreX until a server-side signing route is verified | The ML-DSA-87 key is not stored on Vercel (D10). Opening is a signed on-chain action that has not been verified from a server. | Accepted for judging sessions |
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
+| D20 | A finished launch dims the Launch button and returns to the Board; a failed or expired queued launch re-enables it | Prevents duplicate launches and shows the result in the token list. | **Implemented** (v2.3.2) |
 | D19 | Image bytes are read when the file is chosen, not at submit time | Prevents the browser from releasing the file before launch and failing with a read error. | **Implemented** (v2.3.1) |
 | D15 | Board and Launch as the main UI, in a mobile layout. Features not built show as coming soon. | Judges see only live features. Roadmap items stay visible without implying they work. | **Implemented** (v2.3.0) |
 
@@ -209,6 +210,8 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.5.1 (docs) | 2026-11-18 | (pending) | Launch button dims after a launch is submitted or queued, and the page returns to the Board. Re-enabled if a queued launch expires or fails. Image storage (Vercel Blob) connected by the project owner. |
+| v2.3.2 | 2026-11-18 | (pending) | Launch button dims after a successful or queued launch, then the page goes to the Board tab and refreshes the list. |
 | v2.5.0 (docs and v3) | 2026-11-18 | (pending) | Progress doc covers the v3 launch path (WQOR, MemeFactoryV3, pool seeding, quote check) and the v2.3.1 image fix. |
 | v2.3.1 | 2026-11-18 | (pending) | Launch reads the image on selection and caches it. Shows the browser's exact read error. |
 | v3 contracts | 2026-11-18 | n/a | WQOR, MemeFactoryV3 deployed to Diana. Test launch: pool seeded with 1000 tokens and 10 WQOR. Quote verified. |
@@ -243,6 +246,7 @@ Newest first.
 | I12 | Token images | Upload path built in v2.2.0 | Vercel Blob (D14) | **Built**, pending Blob store and live test |
 | I13 | Board sorting by market cap, hot, volume, and holders has no data source | Those chips are placeholders | Needs a price or trading source (swap work) | Open |
 | I15 | Launch failed with "could not read the image" when the file was read after wallet and status calls | Launch blocked | Read the file on selection and cache it (D19) | **Fixed** in v2.3.1, pending live test |
+| I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | Open, next step |
 | I14 | First push was rejected because the remote had a commit not in the local copy | Push blocked until pulled | `git pull --rebase origin main`, then push | Resolved for v2.2.0 by pull and push; confirm on each release |
 
@@ -260,7 +264,7 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the v2.3.1 launch with a PNG, confirm the token card shows the image.
+1. Live test the v2.3.2 launch with a PNG, confirm the button dims, the page returns to the Board, and the token card shows the image.
 2. Test signed swaps on Diana: a throwaway trader signs a permit and an intent, the owner relayer submits `swap`, and the test checks the trader's balance, the replay rejection, and the expired-intent rejection.
 3. Add the Trade view to the page once the swap test passes, with the quote from `quoteOut` and a signed intent with a slippage limit.
 4. Rerun the v3 launch through the relayer path (`createTokenFor`) before any public launch.

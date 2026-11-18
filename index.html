@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.3.1 -->
-<title>Reqo v2.3.1</title>
+<!-- version: v2.3.2 -->
+<title>Reqo v2.3.2</title>
 <link rel="icon" href="logo.png">
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
@@ -382,11 +382,17 @@ function pollRequest(id) {
       const j = await (await fetch("/api/status?id=" + encodeURIComponent(id))).json();
       if (j.status === "submitted") {
         clearInterval(pollTimer);
+        launchDone = true;
+        $("create").disabled = true;
+        $("create").style.opacity = "0.5";
         setStatus("Launched. Transaction: " + j.txHash);
-        setTimeout(loadTokens, 5000);
+        setTimeout(() => { showTab("board"); loadTokens(); }, 2500);
       } else if (j.status === "expired" || j.status === "error") {
         clearInterval(pollTimer);
-        setStatus("Launch " + j.status + (j.error ? ": " + j.error : "") + ". Sign again to retry.");
+        launchDone = false;
+        $("create").disabled = false;
+        $("create").style.opacity = "1";
+                setStatus("Launch " + j.status + (j.error ? ": " + j.error : "") + ". Sign again to retry.");
       } else {
         setStatus("Queued. Waiting for the window to open" + (j.deadline ? " (valid until " + fmtTime(new Date(j.deadline * 1000).toISOString()) + ")" : "") + ".");
       }
@@ -394,6 +400,7 @@ function pollRequest(id) {
   }, 30000);
 }
 
+let launchDone = false;
 $("create").onclick = async () => {
   const btn = $("create");
   btn.disabled = true;
@@ -450,16 +457,22 @@ $("create").onclick = async () => {
     if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
 
     if (j.status === "queued") {
+      launchDone = true;
+      btn.disabled = true;
+      btn.style.opacity = "0.5";
       setStatus("Queued. Waiting for the window to open" + (j.opensAt ? " at " + fmtTime(j.opensAt) : "") + ".");
       pollRequest(j.id);
     } else {
+      launchDone = true;
+      btn.disabled = true;
+      btn.style.opacity = "0.5";
       setStatus("Launched. Transaction: " + j.txHash);
-      setTimeout(loadTokens, 20000);
+      setTimeout(() => { showTab("board"); loadTokens(); }, 2500);
     }
   } catch (e) {
     setStatus("Error: " + (e.shortMessage || e.message));
   } finally {
-    btn.disabled = false;
+    if (!launchDone) btn.disabled = false;
   }
 };
 
