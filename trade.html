@@ -3,91 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.9.0 trade -->
+<!-- version: v2.10.0 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <style>
-:root{--teal:#0bbfa6;--ink:#0d1b1a;--muted:#5f716d;--bg:#e8f3f1;--card:#fff;--line:#d5e6e2;--bad:#b23b3b}
+:root[data-theme="dark"]{--bg:#0a0c0b;--card:#13161a;--card2:#1a1e22;--line:#252a2f;--ink:#f2f5f3;--muted:#8b9590;--accent:#c6ff1a;--accentInk:#0a0c0b;--good:#2bd27a;--bad:#ff6b6b;--glow:rgba(198,255,26,.25)}
+:root[data-theme="light"]{--bg:#f2f5f3;--card:#ffffff;--card2:#f6f9f7;--line:#dbe3de;--ink:#0d1210;--muted:#66716c;--accent:#b5ec00;--accentInk:#0d1210;--good:#14885a;--bad:#c23b3b;--glow:rgba(181,236,0,.35)}
 *{box-sizing:border-box}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
-.wrap{max-width:480px;margin:0 auto;padding:12px}
-header{display:flex;align-items:center;gap:10px;padding:6px 0 12px}
-header img{width:34px;height:34px;border-radius:8px}
-header .brand{font-weight:800;font-size:20px}
-header .brand span{color:var(--teal)}
-header .sp{flex:1}
-.btn{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;text-decoration:none}
-.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
-.lbl{font-size:12px;color:var(--muted);font-weight:700;letter-spacing:.3px;margin:10px 0 4px}
-.field{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);font-size:16px;background:#fff}
-.seg{display:flex;gap:8px}
-.seg button{flex:1;padding:10px;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer}
-.seg button.on{background:var(--teal);border-color:var(--teal);color:#fff}
-.row{display:flex;justify-content:space-between;font-size:14px;padding:5px 0}
+[hidden]{display:none!important}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:96px}
+.wrap{max-width:460px;margin:0 auto;padding:14px}
+header{display:flex;align-items:center;gap:10px;padding:4px 0 14px}
+header img{width:40px;height:40px;border-radius:10px}
+.brand{font-weight:900;font-size:24px;letter-spacing:.5px}
+.sp{flex:1}
+.pill{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
+.icon{width:42px;height:42px;border-radius:50%;border:1px solid var(--accent);background:var(--card);color:var(--ink);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.tabs{display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:5px;overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:1 0 auto;border:0;background:transparent;color:var(--muted);font-weight:700;font-size:14px;padding:10px 12px;border-radius:999px;cursor:pointer;white-space:nowrap}
+.tab.on{background:var(--accent);color:var(--accentInk);box-shadow:0 0 18px var(--glow)}
+.tab.soon{opacity:.6}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;margin:12px 0}
 .muted{color:var(--muted)}
-.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;word-break:break-all}
-.go{width:100%;padding:14px;border-radius:14px;border:0;background:var(--teal);color:#fff;font-size:16px;font-weight:800;cursor:pointer;margin-top:8px}
-.go:disabled{opacity:.5}
-.ghost{width:100%;padding:10px;border-radius:12px;border:1px solid var(--line);background:#fff;font-weight:700;cursor:pointer;margin-top:6px}
-.status{font-size:14px;margin:10px 2px;min-height:20px;word-break:break-all}
-.verify{white-space:pre-wrap;font-size:13px;background:#f6fbfa;border:1px dashed var(--line);border-radius:12px;padding:10px;min-height:40px}
+.row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;padding:6px 0}
+.row b{font-weight:700}
+.swap{position:relative;background:var(--card);border:1px solid var(--line);border-radius:26px;padding:10px;margin:12px 0}
+.panel{background:var(--card2);border:1px solid var(--line);border-radius:20px;padding:14px}
+.ptop{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:10px}
+.prow{display:flex;align-items:center;gap:10px}
+.tok{display:flex;align-items:center;gap:10px;min-width:0;flex:0 0 auto}
+.ticon{width:46px;height:46px;border-radius:50%;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px;flex:0 0 46px}
+.tok .sym{font-weight:800;font-size:18px}
+.tok small{display:block;color:var(--muted);font-size:12px}
+input.amt{flex:1;min-width:0;text-align:right;background:transparent;border:0;color:var(--ink);font-size:30px;font-weight:800;outline:none;width:100%}
+.out{flex:1;min-width:0;text-align:right;font-size:30px;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.max{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer}
+.flip{position:relative;margin:-14px auto;display:block;width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);background:var(--card);color:var(--accent);font-size:18px;cursor:pointer;z-index:2;box-shadow:0 0 18px var(--glow)}
+.info{background:var(--card2);border:1px solid var(--line);border-radius:18px;padding:12px 14px;margin-top:12px;font-size:14px}
+.info .row span:first-child{color:var(--muted)}
+select.slip{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-weight:700}
+.go{width:100%;margin-top:14px;padding:17px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-size:17px;font-weight:900;cursor:pointer;box-shadow:0 0 28px var(--glow)}
+.go:disabled{opacity:.5;box-shadow:none}
+.ghost{width:100%;margin-top:10px;padding:12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font-weight:800;cursor:pointer}
+.foot{text-align:center;color:var(--muted);font-size:12px;margin-top:14px}
+.status{font-size:14px;margin:10px 4px;min-height:20px;word-break:break-all}
+.field{width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);font-size:15px;background:var(--card2);color:var(--ink)}
+.verifyOut{white-space:pre-wrap;font-size:13px;background:var(--card2);border:1px dashed var(--line);border-radius:14px;padding:10px;min-height:40px;margin-top:10px}
+#explorerLink{display:inline-block;margin-top:10px;font-weight:800;color:var(--accent);text-decoration:none}
+nav.bottom{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom,0px));z-index:10}
+nav.bottom a,nav.bottom span{flex:1;text-align:center;color:var(--muted);font-size:12px;font-weight:700;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
+nav.bottom .ic{font-size:20px;line-height:1}
+nav.bottom .on{color:var(--accent)}
+nav.bottom span{opacity:.5}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <img src="logo.png" alt="Reqo">
-    <div class="brand">Re<span>qo</span></div>
+    <div class="brand">REQO</div>
     <div class="sp"></div>
-    <a class="btn" href="./">Board</a>
-    <button class="btn" id="walletBtn">Connect</button>
+    <button class="icon" id="themeBtn" title="Theme">&#9789;</button>
+    <button class="pill" id="walletBtn">Connect</button>
   </header>
 
-  <div class="card" id="tokenCard">
-    <div class="muted" id="noToken">No token selected.</div>
-    <select id="pick" class="field" style="display:none;margin-top:8px"></select>
-    <div id="tokenInfo" style="display:none">
-      <div style="font-size:18px;font-weight:800" id="tName"></div>
-      <div style="color:var(--teal);font-weight:800" id="tTicker"></div>
-      <div class="row"><span class="muted">Pool reserves</span><span id="reserves">-</span></div>
-      <div class="row"><span class="muted">Price</span><span id="price">-</span></div>
-      <div class="row"><span class="muted">Your WQOR</span><span id="myWqor">-</span></div>
-      <div class="row"><span class="muted">Your tokens</span><span id="myTok">-</span></div>
-    </div>
+  <div class="tabs">
+    <button class="tab on">Trade</button>
+    <button class="tab soon" data-soon="Liquidity">Liquidity</button>
+    <button class="tab soon" data-soon="History">History</button>
+    <button class="tab soon" data-soon="Analytics">Analytics</button>
   </div>
 
-  <div class="card" id="tradeCard" style="display:none">
-    <div class="seg">
-      <button id="modeBuy" class="on">Buy with WQOR</button>
-      <button id="modeSell">Sell for WQOR</button>
+  <div class="card" id="noTokenCard">
+    <div class="muted" id="noToken">No token selected.</div>
+    <select id="pick" class="field" style="margin-top:10px" hidden></select>
+  </div>
+
+  <div class="card" id="poolCard" hidden>
+    <div style="font-size:18px;font-weight:900" id="tName"></div>
+    <div style="color:var(--accent);font-weight:800" id="tTicker"></div>
+    <div class="row"><span class="muted">Pool reserves</span><span id="reserves">-</span></div>
+    <div class="row"><span class="muted">Price</span><span id="price">-</span></div>
+    <div class="row"><span class="muted">Your WQOR</span><span id="myWqor">-</span></div>
+    <div class="row"><span class="muted">Your tokens</span><span id="myTok">-</span></div>
+  </div>
+
+  <div class="swap" id="tradeCard" hidden>
+    <div class="panel">
+      <div class="ptop"><span>From</span><span>Balance: <b id="fromBal">-</b></span></div>
+      <div class="prow">
+        <div class="tok"><div class="ticon" id="fromIcon">W</div><div><div class="sym" id="fromSym">WQOR</div><small id="fromName">Wrapped QOR</small></div></div>
+        <input class="amt" id="amount" inputmode="decimal" placeholder="0">
+        <button class="max" id="maxBtn">MAX</button>
+      </div>
     </div>
-    <div class="lbl" id="amtLbl">AMOUNT (WQOR)</div>
-    <input id="amount" class="field" inputmode="decimal" placeholder="0.0">
-    <div class="lbl">MAX SLIPPAGE</div>
-    <select id="slip" class="field">
-      <option value="1">1%</option>
-      <option value="3" selected>3%</option>
-      <option value="5">5%</option>
-    </select>
-    <div class="row" style="margin-top:10px"><span class="muted">You get (estimate)</span><span id="quote">-</span></div>
-    <div class="row"><span class="muted">Minimum you receive</span><span id="minOut">-</span></div>
-    <button class="ghost" id="getWqor" style="display:none">Get 5 WQOR allowance</button>
-    <button class="go" id="trade">Trade</button>
-    <div class="muted" style="font-size:12px;margin-top:8px">You sign a permit and a trade request. Signing is free. The relayer submits the trade, so you need no gas and no window.</div>
+    <button class="flip" id="flip" title="Switch direction">&#8645;</button>
+    <div class="panel">
+      <div class="ptop"><span>To</span><span>Balance: <b id="toBal">-</b></span></div>
+      <div class="prow">
+        <div class="tok"><div class="ticon" id="toIcon">T</div><div><div class="sym" id="toSym">-</div><small id="toName">-</small></div></div>
+        <div class="out" id="quote">0</div>
+      </div>
+    </div>
+
+    <div class="info">
+      <div class="row"><span>Rate</span><b id="rate">-</b></div>
+      <div class="row"><span>Price impact</span><b id="impact" style="color:var(--good)">-</b></div>
+      <div class="row"><span>Minimum received</span><b id="minOut">-</b></div>
+      <div class="row"><span>Max slippage</span>
+        <select id="slip" class="slip"><option value="1">1%</option><option value="3" selected>3%</option><option value="5">5%</option></select>
+      </div>
+    </div>
+
+    <button class="go" id="trade">Swap Now</button>
+    <button class="ghost" id="getWqor" hidden>Get 5 WQOR allowance</button>
+    <div class="foot">Secure &bull; Transparent &bull; Powered by REQO</div>
   </div>
 
   <div class="status" id="status"></div>
 
   <div class="card">
-    <div style="font-weight:800;margin-bottom:6px">Verify a transaction</div>
-    <div class="muted" style="font-size:13px">This reads the chain directly from the network RPC, not from our server.</div>
-    <input id="verifyHash" class="field" placeholder="0x transaction hash" style="margin-top:8px">
+    <div style="font-weight:900;margin-bottom:4px">Verify a transaction</div>
+    <div class="muted" style="font-size:13px">Read directly from the network RPC, not from our server.</div>
+    <input id="verifyHash" class="field" placeholder="0x transaction hash" style="margin-top:10px">
     <button class="ghost" id="verifyBtn">Verify on chain</button>
-    <div class="verify" id="verifyOut" style="margin-top:8px"></div>
-    <a id="explorerLink" href="#" target="_blank" rel="noopener" style="display:none;margin-top:8px;font-weight:700;color:#0a7f6e">Open in QoreChain explorer</a>
+    <div class="verifyOut" id="verifyOut"></div>
+    <a id="explorerLink" href="#" target="_blank" rel="noopener" style="display:none">Open in QoreChain explorer &rarr;</a>
   </div>
 </div>
+
+<nav class="bottom">
+  <a href="index.html#board"><span class="ic">&#8962;</span>Home</a>
+  <a href="trade.html" class="on"><span class="ic">&#8644;</span>Trade</a>
+  <a href="index.html#launch"><span class="ic">&#128640;</span>Launch</a>
+  <span data-soon="Wallet"><span class="ic">&#9635;</span>Wallet</span>
+  <a href="index.html#more"><span class="ic">&#8943;</span>More</a>
+</nav>
+<div id="toast" style="position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20"></div>
 
 <script>
 const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
@@ -128,6 +183,24 @@ const SWAP_IFACE = new ethers.Interface([
 ]);
 
 const $ = (id) => document.getElementById(id);
+const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
+const token = new URLSearchParams(location.search).get("token");
+let pool = null, poolC = null, mode = "buy", tokenSymbol = "", tokenName = "";
+
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("reqo-theme", t); } catch (e) {}
+  $("themeBtn").innerHTML = t === "dark" ? "&#9728;" : "&#9789;";
+}
+$("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+applyTheme(document.documentElement.dataset.theme || "dark");
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.opacity = "1";
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.opacity = "0"), 1800);
+}
+document.querySelectorAll("[data-soon]").forEach((el) => el.addEventListener("click", () => toast(el.dataset.soon + " is coming soon")));
+
 function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.replace(/^0x/, "").toUpperCase(); }
 function setStatus(t) {
   const el = $("status");
@@ -137,17 +210,14 @@ function setStatus(t) {
     el.append(document.createTextNode(String(t).slice(last, m.index)));
     const a = document.createElement("a");
     a.href = explorerUrl(m[0]); a.target = "_blank"; a.rel = "noopener"; a.textContent = m[0];
-    a.style.color = "#0a7f6e"; a.style.fontWeight = "700";
+    a.style.color = "var(--accent)"; a.style.fontWeight = "800";
     el.append(a);
     last = m.index + m[0].length;
   }
   el.append(document.createTextNode(String(t).slice(last)));
 }
-const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
-const token = new URLSearchParams(location.search).get("token");
-let pool = null, mode = "buy", tokenSymbol = "", tokenName = "", poolC = null;
-
-function poolDomain() { return { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool }; }
+const fmt = (x) => Number(ethers.formatUnits(x, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+const short = (a) => a.slice(0, 6) + "..." + a.slice(-4);
 
 async function getSigner() {
   if (!window.ethereum) throw new Error("Open this page in a wallet browser.");
@@ -168,6 +238,26 @@ async function getSigner() {
   return p.getSigner();
 }
 
+async function myBalances() {
+  if (!window.ethereum || !token) return null;
+  const acc = await window.ethereum.request({ method: "eth_accounts" });
+  if (!acc.length) return null;
+  const me = acc[0];
+  const w = new ethers.Contract(WQOR, PERMIT_ABI, reader);
+  const t = new ethers.Contract(token, PERMIT_ABI, reader);
+  return { me, wqor: await w.balanceOf(me), tok: await t.balanceOf(me) };
+}
+
+function labels() {
+  const buy = mode === "buy";
+  $("fromSym").textContent = buy ? "WQOR" : tokenSymbol;
+  $("fromName").textContent = buy ? "Wrapped QOR" : tokenName;
+  $("fromIcon").textContent = buy ? "W" : (tokenSymbol[0] || "T");
+  $("toSym").textContent = buy ? tokenSymbol : "WQOR";
+  $("toName").textContent = buy ? tokenName : "Wrapped QOR";
+  $("toIcon").textContent = buy ? (tokenSymbol[0] || "T") : "W";
+}
+
 async function listTokens() {
   const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
   const n = Number(await fac.tokenCount());
@@ -184,7 +274,7 @@ async function listTokens() {
     sel.append(o);
   }
   $("noToken").textContent = n ? "Choose a token to trade." : "No tokens yet. Launch one first.";
-  sel.style.display = n ? "block" : "none";
+  sel.hidden = !n;
   sel.onchange = () => { if (sel.value) location.search = "?token=" + sel.value; };
 }
 
@@ -193,17 +283,17 @@ async function init() {
   try {
     const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
     pool = await fac.poolOf(token);
-    if (pool === ethers.ZeroAddress) { setStatus("This token has no pool on the v3 factory."); return; }
+    if (pool === ethers.ZeroAddress) { $("noToken").textContent = "This token has no pool on the v3 factory, so it cannot be traded. Launch a new token or choose another."; return; }
     poolC = new ethers.Contract(pool, POOL_ABI, reader);
     const tk = new ethers.Contract(token, PERMIT_ABI, reader);
     tokenName = await tk.name();
     tokenSymbol = await tk.symbol();
-    $("noToken").style.display = "none";
-    $("tokenInfo").style.display = "block";
-    $("tradeCard").style.display = "block";
+    $("noTokenCard").hidden = true;
+    $("poolCard").hidden = false;
+    $("tradeCard").hidden = false;
     $("tName").textContent = tokenName;
     $("tTicker").textContent = "$" + tokenSymbol;
-    $("amtLbl").textContent = mode === "buy" ? "AMOUNT (WQOR)" : "AMOUNT (" + tokenSymbol + ")";
+    labels();
     await refresh();
     setInterval(refresh, 20000);
   } catch (e) { setStatus("Could not load the token: " + (e.shortMessage || e.message)); }
@@ -213,45 +303,91 @@ async function refresh() {
   if (!poolC) return;
   const tr = await poolC.tokenReserve();
   const wr = await poolC.wqorReserve();
-  $("reserves").textContent = Number(ethers.formatUnits(tr, 18)).toLocaleString() + " " + tokenSymbol + " / " + Number(ethers.formatUnits(wr, 18)).toLocaleString() + " WQOR";
-  $("price").textContent = tr > 0n ? (Number(ethers.formatUnits(wr, 18)) / Number(ethers.formatUnits(tr, 18))).toFixed(8) + " WQOR per " + tokenSymbol : "-";
-  const accts = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
-  if (accts.length) {
-    const me = accts[0];
-    const w = new ethers.Contract(WQOR, PERMIT_ABI, reader);
-    const t = new ethers.Contract(token, PERMIT_ABI, reader);
-    const wb = await w.balanceOf(me), tb = await t.balanceOf(me);
-    $("walletBtn").textContent = me.slice(0, 6) + "..." + me.slice(-4);
-    $("myWqor").textContent = Number(ethers.formatUnits(wb, 18)).toLocaleString() + " WQOR";
-    $("myTok").textContent = Number(ethers.formatUnits(tb, 18)).toLocaleString() + " " + tokenSymbol;
-    $("getWqor").style.display = mode === "buy" && wb === 0n ? "block" : "none";
+  $("reserves").textContent = fmt(tr) + " " + tokenSymbol + " / " + fmt(wr) + " WQOR";
+  $("price").textContent = tr > 0n ? ethers.formatUnits(wr * 10n ** 18n / tr, 18).slice(0, 12) + " WQOR per " + tokenSymbol : "-";
+  const b = await myBalances();
+  if (b) {
+    $("walletBtn").textContent = short(b.me);
+    $("myWqor").textContent = fmt(b.wqor) + " WQOR";
+    $("myTok").textContent = fmt(b.tok) + " " + tokenSymbol;
+    const buy = mode === "buy";
+    $("fromBal").textContent = fmt(buy ? b.wqor : b.tok);
+    $("toBal").textContent = fmt(buy ? b.tok : b.wqor);
+    $("getWqor").hidden = !(buy && b.wqor === 0n);
+  } else {
+    $("fromBal").textContent = "-"; $("toBal").textContent = "-"; $("getWqor").hidden = true;
   }
   await updateQuote();
 }
 
 async function updateQuote() {
   const s = $("amount").value.trim();
-  if (!poolC || !/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("quote").textContent = "-"; $("minOut").textContent = "-"; return; }
+  if (!poolC || !/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) {
+    $("quote").textContent = "0"; $("minOut").textContent = "-"; $("impact").textContent = "-";
+    $("rate").textContent = poolC ? "-" : "-";
+    return;
+  }
   const amountIn = ethers.parseUnits(s, 18);
-  const out = await poolC.quoteOut(mode === "buy", amountIn);
+  const buy = mode === "buy";
+  const out = await poolC.quoteOut(buy, amountIn);
   const minOut = out * (100n - BigInt($("slip").value)) / 100n;
-  $("quote").textContent = Number(ethers.formatUnits(out, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 }) + " " + (mode === "buy" ? tokenSymbol : "WQOR");
-  $("minOut").textContent = Number(ethers.formatUnits(minOut, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 }) + " " + (mode === "buy" ? tokenSymbol : "WQOR");
+  const tr = await poolC.tokenReserve();
+  const wr = await poolC.wqorReserve();
+  const spotOut = buy ? amountIn * tr / wr : amountIn * wr / tr;
+  const impact = spotOut > 0n ? Number((spotOut - out) * 10000n / spotOut) / 100 : 0;
+  $("quote").textContent = fmt(out);
+  $("minOut").textContent = fmt(minOut) + " " + (buy ? tokenSymbol : "WQOR");
+  $("impact").textContent = impact.toFixed(2) + "%";
+  $("impact").style.color = impact > 5 ? "var(--bad)" : "var(--good)";
+  $("rate").textContent = buy
+    ? "1 WQOR = " + fmt(tr * 10n ** 18n / wr) + " " + tokenSymbol
+    : "1 " + tokenSymbol + " = " + fmt(wr * 10n ** 18n / tr) + " WQOR";
 }
 
-function setMode(m) {
-  mode = m;
-  $("modeBuy").classList.toggle("on", m === "buy");
-  $("modeSell").classList.toggle("on", m === "sell");
-  $("amtLbl").textContent = m === "buy" ? "AMOUNT (WQOR)" : "AMOUNT (" + tokenSymbol + ")";
-  refresh();
-}
-$("modeBuy").onclick = () => setMode("buy");
-$("modeSell").onclick = () => setMode("sell");
+$("flip").onclick = () => { mode = mode === "buy" ? "sell" : "buy"; $("amount").value = ""; labels(); refresh(); };
 $("amount").oninput = updateQuote;
 $("slip").onchange = updateQuote;
-
+$("maxBtn").onclick = async () => {
+  const b = await myBalances();
+  if (!b) return toast("Connect your wallet first");
+  $("amount").value = ethers.formatUnits(mode === "buy" ? b.wqor : b.tok, 18);
+  updateQuote();
+};
 $("walletBtn").onclick = async () => { try { await getSigner(); await refresh(); } catch (e) { setStatus(e.message); } };
+
+async function verify(hash) {
+  $("verifyHash").value = hash;
+  $("explorerLink").href = explorerUrl(hash);
+  $("explorerLink").style.display = "inline-block";
+  $("verifyOut").textContent = "Checking the chain...";
+  let rc = null;
+  for (let i = 0; i < 30 && !rc; i++) {
+    rc = await reader.getTransactionReceipt(hash);
+    if (!rc) await new Promise((r) => setTimeout(r, 3000));
+  }
+  if (!rc) { $("verifyOut").textContent = "Not found on chain yet. Press Verify on chain again in a minute."; return; }
+  const lines = [
+    "status: " + (rc.status === 1 ? "success" : "failed"),
+    "block: " + rc.blockNumber,
+    "from: " + rc.from,
+    "to: " + rc.to,
+  ];
+  for (const log of rc.logs) {
+    try {
+      const ev = SWAP_IFACE.parseLog(log);
+      if (ev) lines.push("Swapped on " + log.address + ": trader " + ev.args.trader +
+        ", buy " + ev.args.buy +
+        ", in " + ethers.formatUnits(ev.args.amountIn, 18) +
+        ", out " + ethers.formatUnits(ev.args.amountOut, 18));
+    } catch (_) {}
+  }
+  $("verifyOut").textContent = lines.join("\n");
+}
+$("verifyBtn").onclick = () => {
+  const h = $("verifyHash").value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) { $("verifyOut").textContent = "Enter a 0x transaction hash (64 hex characters)."; return; }
+  verify(h).catch((e) => { $("verifyOut").textContent = "Verify failed: " + e.message; });
+};
 
 async function getWqor() {
   const btn = $("getWqor"); btn.disabled = true;
@@ -298,7 +434,7 @@ async function trade() {
     ));
 
     setStatus("Sign the trade request in your wallet (no gas).");
-    const intentSig = await signer.signTypedData(poolDomain(), INTENT_TYPES, intent);
+    const intentSig = await signer.signTypedData({ name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool }, INTENT_TYPES, intent);
 
     setStatus("Sending to relayer...");
     const r = await fetch("/api/swap", {
@@ -319,44 +455,6 @@ async function trade() {
   finally { btn.disabled = false; }
 }
 $("trade").onclick = trade;
-
-function explorerUrl(hash) {
-  return "https://dashboard.qorechain.io/explorer/tx/" + hash.replace(/^0x/, "").toUpperCase();
-}
-
-async function verify(hash) {
-  $("verifyHash").value = hash;
-  $("explorerLink").href = explorerUrl(hash);
-  $("explorerLink").style.display = "inline-block";
-  $("verifyOut").textContent = "Checking the chain...";
-  let rc = null;
-  for (let i = 0; i < 30 && !rc; i++) {
-    rc = await reader.getTransactionReceipt(hash);
-    if (!rc) await new Promise((r) => setTimeout(r, 3000));
-  }
-  if (!rc) { $("verifyOut").textContent = "Not found on chain yet. Press Verify on chain again in a minute."; return; }
-  const lines = [
-    "status: " + (rc.status === 1 ? "success" : "failed"),
-    "block: " + rc.blockNumber,
-    "from: " + rc.from,
-    "to: " + rc.to,
-  ];
-  for (const log of rc.logs) {
-    try {
-      const ev = SWAP_IFACE.parseLog(log);
-      if (ev) lines.push("Swapped on " + log.address + ": trader " + ev.args.trader +
-        ", buy " + ev.args.buy +
-        ", in " + ethers.formatUnits(ev.args.amountIn, 18) +
-        ", out " + ethers.formatUnits(ev.args.amountOut, 18));
-    } catch (_) {}
-  }
-  $("verifyOut").textContent = lines.join("\n");
-}
-$("verifyBtn").onclick = () => {
-  const h = $("verifyHash").value.trim();
-  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) { $("verifyOut").textContent = "Enter a 0x transaction hash (64 hex characters)."; return; }
-  verify(h).catch((e) => { $("verifyOut").textContent = "Verify failed: " + e.message; });
-};
 
 init();
 </script>
