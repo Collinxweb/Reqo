@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.11.2 trade -->
+<!-- version: v2.12.0 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -58,6 +58,9 @@ nav.bottom a,nav.bottom span{flex:1;text-align:center;color:var(--muted);font-si
 nav.bottom .ic{font-size:20px;line-height:1}
 nav.bottom .on{color:var(--accent)}
 nav.bottom span{opacity:.5}
+.popup{position:fixed;left:50%;top:14px;transform:translateX(-50%);width:calc(100% - 28px);max-width:440px;background:var(--card);border:2px solid var(--accent);border-radius:22px;padding:16px;z-index:30;box-shadow:0 0 30px var(--glow)}
+.popup .ghost{margin-top:10px}
+.warn{color:var(--bad);font-size:14px;margin:8px 4px;font-weight:700}
 </style>
 </head>
 <body>
@@ -113,12 +116,14 @@ nav.bottom span{opacity:.5}
     <div class="info">
       <div class="row"><span>Rate</span><b id="rate">-</b></div>
       <div class="row"><span>Price impact</span><b id="impact" style="color:var(--good)">-</b></div>
+      <div class="row"><span>Pool fee</span><b>0.3% (stays in pool)</b></div>
       <div class="row"><span>Minimum received</span><b id="minOut">-</b></div>
       <div class="row"><span>Max slippage</span>
         <select id="slip" class="slip"><option value="1">1%</option><option value="3" selected>3%</option><option value="5">5%</option></select>
       </div>
     </div>
 
+    <div id="warn" class="warn" hidden></div>
     <button class="go" id="trade">Swap Now</button>
     <button class="ghost" id="getWqor" hidden>Get 5 WQOR allowance</button>
     <div class="foot">Secure &bull; Transparent &bull; Powered by REQO</div>
@@ -144,6 +149,7 @@ nav.bottom span{opacity:.5}
   <span data-soon="Wallet"><span class="ic">&#9635;</span>Wallet</span>
   <a href="index.html#more"><span class="ic">&#8943;</span>More</a>
 </nav>
+<div id="popup" class="popup" hidden></div>
 <div id="toast" style="position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20"></div>
 
 <script>
@@ -170,7 +176,7 @@ const WQOR_EVENTS = [
   "event Transfer(address indexed from, address indexed to, uint256 value)",
 ];
 const RELAYER = "0xC37C97Fd878DF9Ce4C5a6a2dA9D33C8Ed6700a1B";
-const LOOKBACK_BLOCKS = 200000;
+const LOOKBACK_BLOCKS = 100000;
 const PERMIT_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
@@ -195,6 +201,7 @@ const $ = (id) => document.getElementById(id);
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
 const token = new URLSearchParams(location.search).get("token");
 let pool = null, poolC = null, mode = "buy", tokenSymbol = "", tokenName = "";
+let bal = { wqor: null, tok: null };
 
 function applyTheme(t) {
   document.documentElement.dataset.theme = t;
@@ -338,9 +345,11 @@ async function refresh() {
     const buy = mode === "buy";
     $("fromBal").textContent = fmt(buy ? b.wqor : b.tok);
     $("toBal").textContent = fmt(buy ? b.tok : b.wqor);
+    bal.wqor = b.wqor; bal.tok = b.tok;
     $("getWqor").hidden = !(buy && b.wqor === 0n);
   } else {
     $("fromBal").textContent = "-"; $("toBal").textContent = "-"; $("getWqor").hidden = true;
+    bal = { wqor: null, tok: null };
   }
   await updateQuote();
 }
@@ -349,7 +358,8 @@ async function updateQuote() {
   const s = $("amount").value.trim();
   if (!poolC || !/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) {
     $("quote").textContent = "0"; $("minOut").textContent = "-"; $("impact").textContent = "-";
-    $("rate").textContent = poolC ? "-" : "-";
+    $("rate").textContent = "-";
+    $("warn").hidden = true; $("trade").disabled = false; $("trade").textContent = "Swap Now";
     return;
   }
   const amountIn = ethers.parseUnits(s, 18);
@@ -364,9 +374,44 @@ async function updateQuote() {
   $("minOut").textContent = fmt(minOut) + " " + (buy ? tokenSymbol : "WQOR");
   $("impact").textContent = impact.toFixed(2) + "%";
   $("impact").style.color = impact > 5 ? "var(--bad)" : "var(--good)";
+  checkBalance(amountIn);
   $("rate").textContent = buy
     ? "1 WQOR = " + fmt(tr * 10n ** 18n / wr) + " " + tokenSymbol
     : "1 " + tokenSymbol + " = " + fmt(wr * 10n ** 18n / tr) + " WQOR";
+}
+
+function checkBalance(amountIn) {
+  const have = mode === "buy" ? bal.wqor : bal.tok;
+  const sym = mode === "buy" ? "WQOR" : tokenSymbol;
+  const w = $("warn"), go = $("trade");
+  if (have !== null && amountIn > have) {
+    w.hidden = false;
+    w.textContent = "Insufficient " + sym + " balance: you have " + fmt(have) + " " + sym + ".";
+    go.disabled = true; go.textContent = "Insufficient balance";
+    return false;
+  }
+  w.hidden = true; go.disabled = false; go.textContent = "Swap Now";
+  return true;
+}
+
+function showPopup(title, sub, hash) {
+  const p = $("popup");
+  p.innerHTML = "";
+  const t = document.createElement("div");
+  t.style.cssText = "font-weight:900;font-size:18px";
+  t.textContent = "🎉 " + title;
+  const s2 = document.createElement("div");
+  s2.className = "muted"; s2.style.marginTop = "4px"; s2.textContent = sub;
+  const l = document.createElement("div");
+  l.style.cssText = "margin-top:8px;font-size:12px;word-break:break-all";
+  l.append(hashLink(hash));
+  const x = document.createElement("button");
+  x.className = "ghost"; x.textContent = "Close";
+  x.onclick = () => { p.hidden = true; };
+  p.append(t, s2, l, x);
+  p.hidden = false;
+  clearTimeout(showPopup._t);
+  showPopup._t = setTimeout(() => { p.hidden = true; }, 12000);
 }
 
 $("flip").onclick = () => { mode = mode === "buy" ? "sell" : "buy"; $("amount").value = ""; labels(); refresh(); };
@@ -402,6 +447,7 @@ async function trade() {
     const s = $("amount").value.trim();
     if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) throw new Error("Enter an amount above zero");
     const amountIn = ethers.parseUnits(s, 18);
+    if (!checkBalance(amountIn)) throw new Error("Insufficient balance for this swap");
     const signer = await getSigner();
     const trader = await signer.getAddress();
     const buy = mode === "buy";
@@ -439,9 +485,15 @@ async function trade() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
     setStatus("Submitted: " + j.txHash);
+    $("amount").value = "";
+    showPopup(
+      mode === "buy" ? "Bought " + fmt(quote) + " " + tokenSymbol : "Sold " + fmt(amountIn) + " " + tokenSymbol,
+      mode === "buy" ? "Paid " + fmt(amountIn) + " WQOR" : "Received about " + fmt(quote) + " WQOR",
+      j.txHash
+    );
     await refresh();
   } catch (e) { setStatus("Error: " + (e.shortMessage || e.message)); }
-  finally { btn.disabled = false; }
+  finally { updateQuote(); }
 }
 $("trade").onclick = trade;
 
@@ -476,55 +528,88 @@ function rpcError(e) {
   return (e.info && e.info.error && e.info.error.message) || e.shortMessage || e.message;
 }
 
+const HIST_CHUNK = 9000;
+async function scanRange(c, filter, from, to) {
+  const ranges = [];
+  for (let x = from; x <= to; x += HIST_CHUNK) ranges.push([x, Math.min(to, x + HIST_CHUNK - 1)]);
+  const out = [];
+  let next = 0;
+  const worker = async () => {
+    while (next < ranges.length) {
+      const [lo, hi] = ranges[next++];
+      out.push(...(await c.queryFilter(filter, lo, hi)));
+    }
+  };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return out;
+}
+
+function renderRows(rows) {
+  const list = $("histList");
+  if (!rows.length) { list.textContent = "No transactions yet for this wallet."; return; }
+  list.textContent = "";
+  for (const r of rows) {
+    const item = document.createElement("div");
+    item.style.cssText = "padding:10px 0;border-bottom:1px solid var(--line)";
+    const top = document.createElement("div");
+    top.style.cssText = "display:flex;justify-content:space-between;font-weight:800";
+    const t1 = document.createElement("span"); t1.textContent = r.type;
+    const t2 = document.createElement("span"); t2.className = "muted"; t2.style.fontSize = "12px"; t2.textContent = "block " + r.block;
+    top.append(t1, t2);
+    const det = document.createElement("div");
+    det.className = "muted"; det.style.fontSize = "13px"; det.textContent = r.detail;
+    const hl = document.createElement("div");
+    hl.style.cssText = "font-size:12px;word-break:break-all;margin-top:4px";
+    hl.append(hashLink(r.hash));
+    item.append(top, det, hl);
+    list.append(item);
+  }
+}
+
 async function loadHistory() {
   const list = $("histList");
   const b = await myBalances();
   if (!b) { list.textContent = "Connect your wallet to see your transactions."; return; }
-  list.textContent = "Loading from the chain...";
+  const key = "reqo-hist-" + b.me.toLowerCase();
+  let cache = { last: 0, rows: [] };
+  try { cache = JSON.parse(localStorage.getItem(key)) || cache; } catch (e) {}
+  if (cache.rows.length) renderRows(cache.rows);
   try {
     const latest = await reader.getBlockNumber();
-    const from = Math.max(0, latest - LOOKBACK_BLOCKS);
-    const rows = [];
+    const from = cache.last ? cache.last + 1 : Math.max(0, latest - LOOKBACK_BLOCKS);
+    if (from > latest) { renderRows(cache.rows); return; }
+    if (!cache.rows.length) list.textContent = "Loading history...";
+    const fresh = [];
     const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
-    const launches = await getLogsChunked(fac, fac.filters.TokenCreated(null, null, b.me), from, latest);
-    for (const ev of launches) rows.push({ block: ev.blockNumber, type: "Launch", detail: ev.args.name + " ($" + ev.args.symbol + ")", hash: ev.transactionHash });
+    for (const ev of await scanRange(fac, fac.filters.TokenCreated(null, null, b.me), from, latest))
+      fresh.push({ block: ev.blockNumber, type: "Launch", detail: ev.args.name + " ($" + ev.args.symbol + ")", hash: ev.transactionHash });
     const n = Number(await fac.tokenCount());
     for (let i = 0; i < n; i++) {
       const addr = await fac.tokens(i);
       const pool = await fac.poolOf(addr);
       const pc = new ethers.Contract(pool, POOL_ABI, reader);
-      const trades = await getLogsChunked(pc, pc.filters.Swapped(b.me), from, latest);
-      if (!trades.length) continue;
+      const evs = await scanRange(pc, pc.filters.Swapped(b.me), from, latest);
+      if (!evs.length) continue;
       const sym = await (new ethers.Contract(addr, PERMIT_ABI, reader)).symbol();
-      for (const ev of trades) rows.push({ block: ev.blockNumber, type: (ev.args.buy ? "Buy $" : "Sell $") + sym,
-        detail: fmt(ev.args.amountIn) + " in, " + fmt(ev.args.amountOut) + " out", hash: ev.transactionHash });
+      for (const ev of evs)
+        fresh.push({ block: ev.blockNumber, type: (ev.args.buy ? "Buy $" : "Sell $") + sym,
+          detail: fmt(ev.args.amountIn) + " in, " + fmt(ev.args.amountOut) + " out", hash: ev.transactionHash });
     }
     const w = new ethers.Contract(WQOR, WQOR_EVENTS, reader);
-    const grants = await getLogsChunked(w, w.filters.Transfer(RELAYER, b.me), from, latest);
-    for (const ev of grants) rows.push({ block: ev.blockNumber, type: "WQOR allowance", detail: fmt(ev.args.value) + " WQOR", hash: ev.transactionHash });
-
-    rows.sort((x, y) => y.block - x.block);
-    if (!rows.length) { list.textContent = "No transactions yet for this wallet in the last " + LOOKBACK_BLOCKS.toLocaleString() + " blocks."; return; }
-    list.textContent = "";
-    for (const r of rows) {
-      const item = document.createElement("div");
-      item.style.cssText = "padding:10px 0;border-bottom:1px solid var(--line)";
-      const top = document.createElement("div");
-      top.style.cssText = "display:flex;justify-content:space-between;font-weight:800";
-      const t1 = document.createElement("span"); t1.textContent = r.type;
-      const t2 = document.createElement("span"); t2.className = "muted"; t2.style.fontSize = "12px"; t2.textContent = "block " + r.block;
-      top.append(t1, t2);
-      const det = document.createElement("div");
-      det.className = "muted"; det.style.fontSize = "13px"; det.textContent = r.detail;
-      const hl = document.createElement("div");
-      hl.style.cssText = "font-size:12px;word-break:break-all;margin-top:4px";
-      hl.append(hashLink(r.hash));
-      item.append(top, det, hl);
-      list.append(item);
+    for (const ev of await scanRange(w, w.filters.Transfer(RELAYER, b.me), from, latest))
+      fresh.push({ block: ev.blockNumber, type: "WQOR allowance", detail: fmt(ev.args.value) + " WQOR", hash: ev.transactionHash });
+    const seen = new Set();
+    const merged = [];
+    for (const r of [...fresh, ...cache.rows]) {
+      const k = r.hash + r.type;
+      if (!seen.has(k)) { seen.add(k); merged.push(r); }
     }
+    merged.sort((x, y) => y.block - x.block);
+    localStorage.setItem(key, JSON.stringify({ last: latest, rows: merged }));
+    renderRows(merged);
   } catch (e) {
-    list.textContent = "Could not read history from the RPC: " + rpcError(e);
-    console.error("history error", e);
+    if (!cache.rows.length) list.textContent = "Could not read history: " + rpcError(e);
+    else renderRows(cache.rows);
   }
 }
 
