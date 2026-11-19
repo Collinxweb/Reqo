@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.10.0 trade -->
+<!-- version: v2.11.0 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -71,12 +71,13 @@ nav.bottom span{opacity:.5}
   </header>
 
   <div class="tabs">
-    <button class="tab on">Trade</button>
+    <button class="tab on" id="tabTrade">Trade</button>
     <button class="tab soon" data-soon="Liquidity">Liquidity</button>
-    <button class="tab soon" data-soon="History">History</button>
+    <button class="tab" id="tabHist">History</button>
     <button class="tab soon" data-soon="Analytics">Analytics</button>
   </div>
 
+  <div id="tradeSection">
   <div class="card" id="noTokenCard">
     <div class="muted" id="noToken">No token selected.</div>
     <select id="pick" class="field" style="margin-top:10px" hidden></select>
@@ -124,15 +125,16 @@ nav.bottom span{opacity:.5}
   </div>
 
   <div class="status" id="status"></div>
-
-  <div class="card">
-    <div style="font-weight:900;margin-bottom:4px">Verify a transaction</div>
-    <div class="muted" style="font-size:13px">Read directly from the network RPC, not from our server.</div>
-    <input id="verifyHash" class="field" placeholder="0x transaction hash" style="margin-top:10px">
-    <button class="ghost" id="verifyBtn">Verify on chain</button>
-    <div class="verifyOut" id="verifyOut"></div>
-    <a id="explorerLink" href="#" target="_blank" rel="noopener" style="display:none">Open in QoreChain explorer &rarr;</a>
   </div>
+
+  <div id="historySection" hidden>
+    <div class="card">
+      <div style="font-weight:900;margin-bottom:8px">Your transactions</div>
+      <div class="muted" style="font-size:13px;margin-bottom:8px">Read from the chain for your connected wallet: token launches, trades, and WQOR allowances.</div>
+      <div id="histList" class="muted">Connect your wallet to see your transactions.</div>
+    </div>
+  </div>
+
 </div>
 
 <nav class="bottom">
@@ -154,6 +156,7 @@ const FACTORY_ABI = [
   "function poolOf(address) view returns (address)",
   "function tokenCount() view returns (uint256)",
   "function tokens(uint256) view returns (address)",
+  "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)",
 ];
 const POOL_ABI = [
   "function token() view returns (address)",
@@ -161,7 +164,13 @@ const POOL_ABI = [
   "function wqorReserve() view returns (uint256)",
   "function quoteOut(bool buy, uint256 amountIn) view returns (uint256)",
   "function seeded() view returns (bool)",
+  "event Swapped(address indexed trader, bool buy, uint256 amountIn, uint256 amountOut)",
 ];
+const WQOR_EVENTS = [
+  "event Transfer(address indexed from, address indexed to, uint256 value)",
+];
+const RELAYER = "0xC37C97Fd878DF9Ce4C5a6a2dA9D33C8Ed6700a1B";
+const LOOKBACK_BLOCKS = 200000;
 const PERMIT_ABI = [
   "function name() view returns (string)",
   "function symbol() view returns (string)",
@@ -202,16 +211,32 @@ function toast(msg) {
 document.querySelectorAll("[data-soon]").forEach((el) => el.addEventListener("click", () => toast(el.dataset.soon + " is coming soon")));
 
 function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.replace(/^0x/, "").toUpperCase(); }
+const cosmosHashCache = new Map();
+async function explorerHref(evmHash) {
+  if (cosmosHashCache.has(evmHash)) return explorerUrl(cosmosHashCache.get(evmHash));
+  try {
+    const q = encodeURIComponent("ethereum_tx.ethereumTxHash='" + evmHash.toLowerCase() + "'");
+    const r = await fetch("https://api-testnet.qore.host/cosmos/tx/v1beta1/txs?events=" + q);
+    const j = await r.json();
+    const h = j.tx_responses && j.tx_responses[0] && j.tx_responses[0].txhash;
+    if (h) { cosmosHashCache.set(evmHash, h); return explorerUrl(h); }
+  } catch (e) {}
+  return null;
+}
+function hashLink(h) {
+  const a = document.createElement("a");
+  a.href = "#"; a.target = "_blank"; a.rel = "noopener"; a.textContent = h;
+  a.style.color = "var(--accent)"; a.style.fontWeight = "800";
+  explorerHref(h).then((u) => { if (u) a.href = u; });
+  return a;
+}
 function setStatus(t) {
   const el = $("status");
   el.textContent = "";
   let last = 0;
   for (const m of String(t).matchAll(/0x[0-9a-fA-F]{64}/g)) {
     el.append(document.createTextNode(String(t).slice(last, m.index)));
-    const a = document.createElement("a");
-    a.href = explorerUrl(m[0]); a.target = "_blank"; a.rel = "noopener"; a.textContent = m[0];
-    a.style.color = "var(--accent)"; a.style.fontWeight = "800";
-    el.append(a);
+    el.append(hashLink(m[0]));
     last = m.index + m[0].length;
   }
   el.append(document.createTextNode(String(t).slice(last)));
@@ -355,40 +380,6 @@ $("maxBtn").onclick = async () => {
 };
 $("walletBtn").onclick = async () => { try { await getSigner(); await refresh(); } catch (e) { setStatus(e.message); } };
 
-async function verify(hash) {
-  $("verifyHash").value = hash;
-  $("explorerLink").href = explorerUrl(hash);
-  $("explorerLink").style.display = "inline-block";
-  $("verifyOut").textContent = "Checking the chain...";
-  let rc = null;
-  for (let i = 0; i < 30 && !rc; i++) {
-    rc = await reader.getTransactionReceipt(hash);
-    if (!rc) await new Promise((r) => setTimeout(r, 3000));
-  }
-  if (!rc) { $("verifyOut").textContent = "Not found on chain yet. Press Verify on chain again in a minute."; return; }
-  const lines = [
-    "status: " + (rc.status === 1 ? "success" : "failed"),
-    "block: " + rc.blockNumber,
-    "from: " + rc.from,
-    "to: " + rc.to,
-  ];
-  for (const log of rc.logs) {
-    try {
-      const ev = SWAP_IFACE.parseLog(log);
-      if (ev) lines.push("Swapped on " + log.address + ": trader " + ev.args.trader +
-        ", buy " + ev.args.buy +
-        ", in " + ethers.formatUnits(ev.args.amountIn, 18) +
-        ", out " + ethers.formatUnits(ev.args.amountOut, 18));
-    } catch (_) {}
-  }
-  $("verifyOut").textContent = lines.join("\n");
-}
-$("verifyBtn").onclick = () => {
-  const h = $("verifyHash").value.trim();
-  if (!/^0x[0-9a-fA-F]{64}$/.test(h)) { $("verifyOut").textContent = "Enter a 0x transaction hash (64 hex characters)."; return; }
-  verify(h).catch((e) => { $("verifyOut").textContent = "Verify failed: " + e.message; });
-};
-
 async function getWqor() {
   const btn = $("getWqor"); btn.disabled = true;
   try {
@@ -399,7 +390,6 @@ async function getWqor() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "faucet error " + r.status);
     setStatus("WQOR allowance sent: " + j.txHash);
-    await verify(j.txHash);
     await refresh();
   } catch (e) { setStatus("Error: " + (e.shortMessage || e.message)); }
   finally { btn.disabled = false; }
@@ -449,12 +439,72 @@ async function trade() {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
     setStatus("Submitted: " + j.txHash);
-    await verify(j.txHash);
     await refresh();
   } catch (e) { setStatus("Error: " + (e.shortMessage || e.message)); }
   finally { btn.disabled = false; }
 }
 $("trade").onclick = trade;
+
+function showView(v) {
+  $("tabTrade").classList.toggle("on", v === "trade");
+  $("tabHist").classList.toggle("on", v === "history");
+  $("tradeSection").hidden = v !== "trade";
+  $("historySection").hidden = v !== "history";
+  if (v === "history") loadHistory();
+}
+$("tabTrade").onclick = () => showView("trade");
+$("tabHist").onclick = () => showView("history");
+
+async function loadHistory() {
+  const list = $("histList");
+  const b = await myBalances();
+  if (!b) { list.textContent = "Connect your wallet to see your transactions."; return; }
+  list.textContent = "Loading from the chain...";
+  try {
+    const latest = await reader.getBlockNumber();
+    const from = Math.max(0, latest - LOOKBACK_BLOCKS);
+    const rows = [];
+    const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
+    const launches = await fac.queryFilter(fac.filters.TokenCreated(null, null, b.me), from, latest);
+    for (const ev of launches) rows.push({ block: ev.blockNumber, type: "Launch", detail: ev.args.name + " ($" + ev.args.symbol + ")", hash: ev.transactionHash });
+    const n = Number(await fac.tokenCount());
+    for (let i = 0; i < n; i++) {
+      const addr = await fac.tokens(i);
+      const pool = await fac.poolOf(addr);
+      const pc = new ethers.Contract(pool, POOL_ABI, reader);
+      const trades = await pc.queryFilter(pc.filters.Swapped(b.me), from, latest);
+      if (!trades.length) continue;
+      const sym = await (new ethers.Contract(addr, PERMIT_ABI, reader)).symbol();
+      for (const ev of trades) rows.push({ block: ev.blockNumber, type: (ev.args.buy ? "Buy $" : "Sell $") + sym,
+        detail: fmt(ev.args.amountIn) + " in, " + fmt(ev.args.amountOut) + " out", hash: ev.transactionHash });
+    }
+    const w = new ethers.Contract(WQOR, WQOR_EVENTS, reader);
+    const grants = await w.queryFilter(w.filters.Transfer(RELAYER, b.me), from, latest);
+    for (const ev of grants) rows.push({ block: ev.blockNumber, type: "WQOR allowance", detail: fmt(ev.args.value) + " WQOR", hash: ev.transactionHash });
+
+    rows.sort((x, y) => y.block - x.block);
+    if (!rows.length) { list.textContent = "No transactions yet for this wallet in the last " + LOOKBACK_BLOCKS.toLocaleString() + " blocks."; return; }
+    list.textContent = "";
+    for (const r of rows) {
+      const item = document.createElement("div");
+      item.style.cssText = "padding:10px 0;border-bottom:1px solid var(--line)";
+      const top = document.createElement("div");
+      top.style.cssText = "display:flex;justify-content:space-between;font-weight:800";
+      const t1 = document.createElement("span"); t1.textContent = r.type;
+      const t2 = document.createElement("span"); t2.className = "muted"; t2.style.fontSize = "12px"; t2.textContent = "block " + r.block;
+      top.append(t1, t2);
+      const det = document.createElement("div");
+      det.className = "muted"; det.style.fontSize = "13px"; det.textContent = r.detail;
+      const hl = document.createElement("div");
+      hl.style.cssText = "font-size:12px;word-break:break-all;margin-top:4px";
+      hl.append(hashLink(r.hash));
+      item.append(top, det, hl);
+      list.append(item);
+    }
+  } catch (e) {
+    list.textContent = "Could not read history from the RPC: " + (e.shortMessage || e.message);
+  }
+}
 
 init();
 </script>

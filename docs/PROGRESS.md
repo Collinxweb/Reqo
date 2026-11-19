@@ -184,6 +184,8 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D16 | Relayer windows are scheduled for 01:00 and 13:00 UTC, five hours each | Gives testers and judges predictable test slots in both UTC halves of the day. | **Implemented** (v2.4.0) |
 | D17 | Window opening stays manual in QoreX until a server-side signing route is verified | The ML-DSA-87 key is not stored on Vercel (D10). Opening is a signed on-chain action that has not been verified from a server. | Accepted for judging sessions |
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
+| D27 | Transaction hashes are shown as links; no manual verify step | Users should not copy hashes. | **Implemented** (v2.11.0) |
+| D28 | The explorer keys transactions by the Cosmos hash, so EVM hashes are mapped to it through the chain REST API before linking | The EVM hash alone opens 'Transaction Not Found'. | **Implemented**, mapping unverified on QoreChain; falls back to the plain hash |
 | D26 | Dark theme is the default; light theme is one tap away and remembered on the device | Matches the approved design while keeping the light option. | **Implemented** (v2.10.0) |
 | D25 | Launches use the v3 factory only; v2 tokens stay as records and cannot be traded | Only v3 tokens have pools. | **Implemented** (v2.9.0) |
 | D24 | Explorer links use `https://dashboard.qorechain.io/explorer/tx/` with the hash in uppercase and without `0x` | Matches the explorer's own transaction URL format. | **Implemented** (v2.8.1) |
@@ -220,6 +222,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.11.0 | 2026-11-18 | (pending) | Verify block removed from the Trade page. Every transaction hash is a link that opens the explorer automatically. History tab lists the wallet's launches, trades, and WQOR allowances read from the chain (last 200,000 blocks). |
 | v2.10.0 | 2026-11-18 | (pending) | Visual redesign to the new Reqo design: dark (default) and light themes with a toggle, lime accent, rounded cards, bottom navigation (Home, Trade, Launch, Wallet, More). Trade page rebuilt as a swap card with From and To panels, flip control, rate, price impact, minimum received, slippage, and Swap Now. Liquidity, History, Analytics, and Wallet show as coming soon. |
 | v2.9.0 | 2026-11-18 | (pending) | Launches move to MemeFactoryV3 (`0x65353…Ed8f`) with EIP-712 domain version 3, so every new token gets a pool. Relayer tops up and approves 10 WQOR before each launch. Board lists v3 tokens. Trade page picks any v3 token when opened without one. Transaction hashes in status messages are clickable links to the explorer. |
 | v2.8.1 | 2026-11-18 | (pending) | Trade page shows an explorer link for every checked hash, using `https://dashboard.qorechain.io/explorer/tx/<hash without 0x, uppercase>`. |
@@ -266,6 +269,7 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
+| I22 | EVM transaction hashes return 'Transaction Not Found' on the explorer | Links opened the wrong page | Map each EVM hash to its Cosmos hash via `ethereum_tx.ethereumTxHash` event search (D28) | Built in v2.11.0, pending live test |
 | I19 | No public block explorer link was set | Judges need an explorer link to check hashes | Explorer link added from the confirmed URL format (D24) | **Fixed** in v2.8.1, pending live test |
 | I18 | Public traders have no WQOR source | Trade view cannot be used by testers yet | Relayer-funded allowance (D22) | **Built** in v2.7.0, pending live test |
 | I14 | First push was rejected because the remote had a commit not in the local copy | Push blocked until pulled | `git pull --rebase origin main`, then push | Resolved for v2.2.0 by pull and push; confirm on each release |
@@ -284,13 +288,12 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the redesigned pages in both themes on a phone: Board cards open the Trade page, the Trade swap card flips direction, and the bottom navigation links work.
-2. Live test a v3 launch from the site and a trade on a v3 token, verifying the hash on chain.
+1. Live test the explorer mapping: open a trade hash from the Trade page and confirm it opens the transaction. If the event search returns nothing, check the REST response for the ethereum hash attribute name, then update the query.
+2. Live test the History tab after a launch, a trade, and a WQOR allowance.
 3. Relaunch Proofkick on v3 so it can be traded (I20).
-4. Add Liquidity, History, and Analytics views when their data sources exist.
-5. Live test the WQOR faucet cap and the swap relayer refusals.
-6. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
-7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+4. Add Liquidity and Analytics when their data sources exist.
+5. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
+6. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
 ## 14. Swap Design (route A in use)
 
