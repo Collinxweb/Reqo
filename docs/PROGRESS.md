@@ -186,6 +186,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
 | D27 | Transaction hashes are shown as links; no manual verify step | Users should not copy hashes. | **Implemented** (v2.11.0) |
 | D29 | Swaps are blocked client-side when the amount exceeds the balance, and the message names the token and balance | The pool reverts with an unreadable custom error otherwise. | **Implemented** (v2.12.0), pending live test |
+| D31 | Wallet history reads token Transfer events and launch events from the chain; native QOR is not in history until its transfer source is confirmed | Native QOR moves without event logs. | **Implemented** (v2.14.0), native history open |
 | D30 | Explorer links use the EVM hash directly: `https://dashboard.qorechain.io/explorer/tx/<0x hash>`, with the explorer set to Testnet | Confirmed by QoreChain. Removes the Cosmos lookup. | **Implemented** (v2.13.0) |
 | D28 | The explorer keys transactions by the Cosmos hash, so EVM hashes are mapped to it through the chain REST API before linking | The EVM hash alone opens 'Transaction Not Found'. | **Implemented**, mapping unverified on QoreChain; falls back to the plain hash |
 | D26 | Dark theme is the default; light theme is one tap away and remembered on the device | Matches the approved design while keeping the light option. | **Implemented** (v2.10.0) |
@@ -224,6 +225,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.14.0 | 2026-11-20 | (pending) | Wallet page (`wallet.html`) unlocked from the bottom bar on Home and Trade. Shows native QOR, WQOR, and every Reqo token balance; Send (native QOR, WQOR, tokens) and Receive (address with copy); history of launches, trades, WQOR allowances, and token transfers, cached per wallet. Native QOR transfers are not listed in history yet (no logs). |
 | v2.13.1 | 2026-11-20 | (pending) | Relayer records the chain's real error for failed launches (queue record and relay response) instead of ethers' generic 'could not coalesce error'. |
 | v2.13.0 | 2026-11-18 | (pending) | Transaction hash links open the explorer directly with the EVM hash (`0x`, lowercase) on Testnet. The Cosmos lookup was removed. Notes on History say links open the Testnet explorer. |
 | v2.12.1 | 2026-11-18 | (pending) | Hash links that the explorer has not resolved no longer navigate back to the page; they show a notice. Explorer format request drafted for QoreChain Discord. |
@@ -276,6 +278,7 @@ Newest first.
 | I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
+| I29 | Native QOR wallet model not yet documented (address, signing, and send path for qor1 addresses) | Native QOR send and history depend on it | Research the native wallet and its transfer history source | Open, next item |
 | I28 | Queued launch processed with the window live failed with 'could not coalesce error' (signature passed; failure on chain, cause unknown) | Queued launch lost; relaunch needed | Error detail now recorded (v2.13.1); check window max_value and relayer WQOR/approval before relaunch | Open, pending error detail |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
 | I27 | Explorer link for EVM hashes not resolved | Resolved by QoreChain: use the 0x hash on the Testnet explorer (D30) | **Resolved** |
@@ -303,12 +306,11 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Check the relayer window `max_value` and `remaining_txs`. A launch needs the 10 QOR seed deposit, the approval, and the launch itself.
-2. Relaunch Proofkick once the window shows enough `max_value`, then read the queue record or relay response for the exact error if it fails.
-3. Relaunch Proofkick on v3 so it can be traded (I20).
-4. Live test a trade hash link on the Testnet explorer (D30).
-5. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
-6. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+1. Live test the Wallet page: balances for each asset, Send of WQOR and a token, Receive copy, and history after a launch and a trade.
+2. Research the native QOR wallet: how qor1 addresses are derived, how native transfers are signed, and where native transfers can be read (I29).
+3. Add native QOR transfers to history once a source is confirmed.
+4. Relaunch Proofkick and read the relayer error text if it fails (I28).
+5. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
 ## 14. Swap Design (route A in use)
 
