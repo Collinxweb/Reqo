@@ -222,6 +222,8 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.11.2 | 2026-11-18 | (pending) | History chunks sized to 9,000 blocks to fit the RPC cap of 10,000 blocks per log query (measured from the RPC: 'maximum [from, to] blocks distance: 10000'). |
+| v2.11.1 | 2026-11-18 | (pending) | History reads the chain in chunks that shrink on RPC error (log range limit), and shows the RPC's own error message. |
 | v2.11.0 | 2026-11-18 | (pending) | Verify block removed from the Trade page. Every transaction hash is a link that opens the explorer automatically. History tab lists the wallet's launches, trades, and WQOR allowances read from the chain (last 200,000 blocks). |
 | v2.10.0 | 2026-11-18 | (pending) | Visual redesign to the new Reqo design: dark (default) and light themes with a toggle, lime accent, rounded cards, bottom navigation (Home, Trade, Launch, Wallet, More). Trade page rebuilt as a swap card with From and To panels, flip control, rate, price impact, minimum received, slippage, and Swap Now. Liquidity, History, Analytics, and Wallet show as coming soon. |
 | v2.9.0 | 2026-11-18 | (pending) | Launches move to MemeFactoryV3 (`0x65353…Ed8f`) with EIP-712 domain version 3, so every new token gets a pool. Relayer tops up and approves 10 WQOR before each launch. Board lists v3 tokens. Trade page picks any v3 token when opened without one. Transaction hashes in status messages are clickable links to the explorer. |
@@ -269,6 +271,8 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
+| I24 | RPC rejects log queries over 10,000 blocks (measured) | History fails without chunking | Chunks of 9,000 blocks (v2.11.2) | Built, pending live test |
+| I23 | History query over 200,000 blocks failed with 'could not coalesce error' (RPC log range limit) | History tab empty | Chunked log queries (v2.11.1) | Built, pending live test |
 | I22 | EVM transaction hashes return 'Transaction Not Found' on the explorer | Links opened the wrong page | Map each EVM hash to its Cosmos hash via `ethereum_tx.ethereumTxHash` event search (D28) | Built in v2.11.0, pending live test |
 | I19 | No public block explorer link was set | Judges need an explorer link to check hashes | Explorer link added from the confirmed URL format (D24) | **Fixed** in v2.8.1, pending live test |
 | I18 | Public traders have no WQOR source | Trade view cannot be used by testers yet | Relayer-funded allowance (D22) | **Built** in v2.7.0, pending live test |

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.11.0 trade -->
+<!-- version: v2.11.2 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -455,6 +455,27 @@ function showView(v) {
 $("tabTrade").onclick = () => showView("trade");
 $("tabHist").onclick = () => showView("history");
 
+async function getLogsChunked(c, filter, from, to) {
+  let out = [];
+  let start = from;
+  let size = 9000;
+  while (start <= to) {
+    const end = Math.min(to, start + size - 1);
+    try {
+      out = out.concat(await c.queryFilter(filter, start, end));
+      start = end + 1;
+      size = Math.min(size * 2, 9000);
+    } catch (e) {
+      if (size <= 500) throw e;
+      size = Math.floor(size / 2);
+    }
+  }
+  return out;
+}
+function rpcError(e) {
+  return (e.info && e.info.error && e.info.error.message) || e.shortMessage || e.message;
+}
+
 async function loadHistory() {
   const list = $("histList");
   const b = await myBalances();
@@ -465,21 +486,21 @@ async function loadHistory() {
     const from = Math.max(0, latest - LOOKBACK_BLOCKS);
     const rows = [];
     const fac = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
-    const launches = await fac.queryFilter(fac.filters.TokenCreated(null, null, b.me), from, latest);
+    const launches = await getLogsChunked(fac, fac.filters.TokenCreated(null, null, b.me), from, latest);
     for (const ev of launches) rows.push({ block: ev.blockNumber, type: "Launch", detail: ev.args.name + " ($" + ev.args.symbol + ")", hash: ev.transactionHash });
     const n = Number(await fac.tokenCount());
     for (let i = 0; i < n; i++) {
       const addr = await fac.tokens(i);
       const pool = await fac.poolOf(addr);
       const pc = new ethers.Contract(pool, POOL_ABI, reader);
-      const trades = await pc.queryFilter(pc.filters.Swapped(b.me), from, latest);
+      const trades = await getLogsChunked(pc, pc.filters.Swapped(b.me), from, latest);
       if (!trades.length) continue;
       const sym = await (new ethers.Contract(addr, PERMIT_ABI, reader)).symbol();
       for (const ev of trades) rows.push({ block: ev.blockNumber, type: (ev.args.buy ? "Buy $" : "Sell $") + sym,
         detail: fmt(ev.args.amountIn) + " in, " + fmt(ev.args.amountOut) + " out", hash: ev.transactionHash });
     }
     const w = new ethers.Contract(WQOR, WQOR_EVENTS, reader);
-    const grants = await w.queryFilter(w.filters.Transfer(RELAYER, b.me), from, latest);
+    const grants = await getLogsChunked(w, w.filters.Transfer(RELAYER, b.me), from, latest);
     for (const ev of grants) rows.push({ block: ev.blockNumber, type: "WQOR allowance", detail: fmt(ev.args.value) + " WQOR", hash: ev.transactionHash });
 
     rows.sort((x, y) => y.block - x.block);
@@ -502,7 +523,8 @@ async function loadHistory() {
       list.append(item);
     }
   } catch (e) {
-    list.textContent = "Could not read history from the RPC: " + (e.shortMessage || e.message);
+    list.textContent = "Could not read history from the RPC: " + rpcError(e);
+    console.error("history error", e);
   }
 }
 
