@@ -225,6 +225,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.14.1 | 2026-11-20 | (pending) | Wallet page restyled to the agreed layout: wallet card with native QOR balance, Send and Receive actions, Your Tokens list with a chevron to send, History, Trades, and Activity tabs, and the bottom bar arrangement. USD values are not shown until a price feed exists. |
 | v2.14.0 | 2026-11-20 | (pending) | Wallet page (`wallet.html`) unlocked from the bottom bar on Home and Trade. Shows native QOR, WQOR, and every Reqo token balance; Send (native QOR, WQOR, tokens) and Receive (address with copy); history of launches, trades, WQOR allowances, and token transfers, cached per wallet. Native QOR transfers are not listed in history yet (no logs). |
 | v2.13.1 | 2026-11-20 | (pending) | Relayer records the chain's real error for failed launches (queue record and relay response) instead of ethers' generic 'could not coalesce error'. |
 | v2.13.0 | 2026-11-18 | (pending) | Transaction hash links open the explorer directly with the EVM hash (`0x`, lowercase) on Testnet. The Cosmos lookup was removed. Notes on History say links open the Testnet explorer. |
@@ -306,7 +307,7 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the Wallet page: balances for each asset, Send of WQOR and a token, Receive copy, and history after a launch and a trade.
+1. Live test the restyled Wallet page in both themes: balances for each asset, Send of WQOR and a token, Receive copy, and history after a launch and a trade.
 2. Research the native QOR wallet: how qor1 addresses are derived, how native transfers are signed, and where native transfers can be read (I29).
 3. Add native QOR transfers to history once a source is confirmed.
 4. Relaunch Proofkick and read the relayer error text if it fails (I28).
