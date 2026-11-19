@@ -186,6 +186,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
 | D27 | Transaction hashes are shown as links; no manual verify step | Users should not copy hashes. | **Implemented** (v2.11.0) |
 | D29 | Swaps are blocked client-side when the amount exceeds the balance, and the message names the token and balance | The pool reverts with an unreadable custom error otherwise. | **Implemented** (v2.12.0), pending live test |
+| D30 | Explorer links use the EVM hash directly: `https://dashboard.qorechain.io/explorer/tx/<0x hash>`, with the explorer set to Testnet | Confirmed by QoreChain. Removes the Cosmos lookup. | **Implemented** (v2.13.0) |
 | D28 | The explorer keys transactions by the Cosmos hash, so EVM hashes are mapped to it through the chain REST API before linking | The EVM hash alone opens 'Transaction Not Found'. | **Implemented**, mapping unverified on QoreChain; falls back to the plain hash |
 | D26 | Dark theme is the default; light theme is one tap away and remembered on the device | Matches the approved design while keeping the light option. | **Implemented** (v2.10.0) |
 | D25 | Launches use the v3 factory only; v2 tokens stay as records and cannot be traded | Only v3 tokens have pools. | **Implemented** (v2.9.0) |
@@ -223,6 +224,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.13.0 | 2026-11-18 | (pending) | Transaction hash links open the explorer directly with the EVM hash (`0x`, lowercase) on Testnet. The Cosmos lookup was removed. Notes on History say links open the Testnet explorer. |
 | v2.12.1 | 2026-11-18 | (pending) | Hash links that the explorer has not resolved no longer navigate back to the page; they show a notice. Explorer format request drafted for QoreChain Discord. |
 | v2.12.0 | 2026-11-18 | (pending) | Trade page: swap blocked with a warning when the amount exceeds the wallet balance (the pool previously reverted with 'unknown custom error'). Amount clears and a success popup shows the trade and its hash after each swap. Pool fee (0.3%, stays in the pool) shown on the card. History scans in parallel and caches results per wallet, so later visits only scan new blocks. Lookback reduced to 100,000 blocks for the first scan. |
 | v2.11.2 | 2026-11-18 | (pending) | History chunks sized to 9,000 blocks to fit the RPC cap of 10,000 blocks per log query (measured from the RPC: 'maximum [from, to] blocks distance: 10000'). |
@@ -274,7 +276,8 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
-| I27 | Explorer link for EVM hashes not resolved; links returned to the page | Clicks reloaded History | Notice instead of navigation (v2.12.1); waiting on QoreChain for the hash mapping | Open, Discord request sent |
+| I27 | Explorer link for EVM hashes not resolved | Resolved by QoreChain: use the 0x hash on the Testnet explorer (D30) | **Resolved** |
+| I27-old | Explorer link for EVM hashes not resolved; links returned to the page | Clicks reloaded History | Notice instead of navigation (v2.12.1); waiting on QoreChain for the hash mapping | Open, Discord request sent |
 | I25 | History first load was slow (sequential scan over 200,000 blocks) | Waiting time on History | Parallel scan, per-wallet cache, 100,000-block first lookback (v2.12.0) | Built, pending live test |
 | I26 | Swap with an amount above balance reverted with 'execution reverted (unknown custom error)' | Confusing error | Client-side balance check (D29) | Built, pending live test |
 | I24 | RPC rejects log queries over 10,000 blocks (measured) | History fails without chunking | Chunks of 9,000 blocks (v2.11.2) | Built, pending live test |
@@ -301,7 +304,7 @@ Each update follows this block, and each release adds an entry to the changelog 
 1. Live test the balance block: enter more WQOR than the balance, confirm the warning appears and Swap stays disabled.
 2. Live test the success popup and cleared amount after a trade.
 3. Live test History: first load, then a second load to confirm only new blocks are scanned.
-4. Live test the explorer link mapping for trade hashes (D28).
+4. Live test a trade hash link on the Testnet explorer (D30).
 5. Relaunch Proofkick on v3 so it can be traded (I20).
 6. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
 7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
