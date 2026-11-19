@@ -225,6 +225,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.14.2 | 2026-11-20 | (pending) | Wallet shows token images from the description's `img:` link (Vercel Blob) with a letter fallback. Tapping a token row, or its Swap button, opens Trade for that token. WQOR and QOR are not swappable from their rows. |
 | v2.14.1 | 2026-11-20 | (pending) | Wallet page restyled to the agreed layout: wallet card with native QOR balance, Send and Receive actions, Your Tokens list with a chevron to send, History, Trades, and Activity tabs, and the bottom bar arrangement. USD values are not shown until a price feed exists. |
 | v2.14.0 | 2026-11-20 | (pending) | Wallet page (`wallet.html`) unlocked from the bottom bar on Home and Trade. Shows native QOR, WQOR, and every Reqo token balance; Send (native QOR, WQOR, tokens) and Receive (address with copy); history of launches, trades, WQOR allowances, and token transfers, cached per wallet. Native QOR transfers are not listed in history yet (no logs). |
 | v2.13.1 | 2026-11-20 | (pending) | Relayer records the chain's real error for failed launches (queue record and relay response) instead of ethers' generic 'could not coalesce error'. |
@@ -279,6 +280,7 @@ Newest first.
 | I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
+| I30 | ML-DSA-87 key for users: native registration is `MsgRegisterPQCKeyV2`, a Cosmos transaction signed with the account's secp256k1 key. MetaMask cannot sign it. The EVM lane status is unclear: our earlier notes say EVM transactions need a registered key and window; QoreChain says the EVM lane verifies classical signatures today. | Users depend on the relayer for launches and trades | Confirm the EVM requirement and the registration path with QoreChain before building key generation | Open, question sent |
 | I29 | Native QOR wallet model not yet documented (address, signing, and send path for qor1 addresses) | Native QOR send and history depend on it | Research the native wallet and its transfer history source | Open, next item |
 | I28 | Queued launch processed with the window live failed with 'could not coalesce error' (signature passed; failure on chain, cause unknown) | Queued launch lost; relaunch needed | Error detail now recorded (v2.13.1); check window max_value and relayer WQOR/approval before relaunch | Open, pending error detail |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
