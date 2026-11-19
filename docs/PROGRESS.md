@@ -224,6 +224,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.13.1 | 2026-11-20 | (pending) | Relayer records the chain's real error for failed launches (queue record and relay response) instead of ethers' generic 'could not coalesce error'. |
 | v2.13.0 | 2026-11-18 | (pending) | Transaction hash links open the explorer directly with the EVM hash (`0x`, lowercase) on Testnet. The Cosmos lookup was removed. Notes on History say links open the Testnet explorer. |
 | v2.12.1 | 2026-11-18 | (pending) | Hash links that the explorer has not resolved no longer navigate back to the page; they show a notice. Explorer format request drafted for QoreChain Discord. |
 | v2.12.0 | 2026-11-18 | (pending) | Trade page: swap blocked with a warning when the amount exceeds the wallet balance (the pool previously reverted with 'unknown custom error'). Amount clears and a success popup shows the trade and its hash after each swap. Pool fee (0.3%, stays in the pool) shown on the card. History scans in parallel and caches results per wallet, so later visits only scan new blocks. Lookback reduced to 100,000 blocks for the first scan. |
@@ -275,6 +276,7 @@ Newest first.
 | I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
+| I28 | Queued launch processed with the window live failed with 'could not coalesce error' (signature passed; failure on chain, cause unknown) | Queued launch lost; relaunch needed | Error detail now recorded (v2.13.1); check window max_value and relayer WQOR/approval before relaunch | Open, pending error detail |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
 | I27 | Explorer link for EVM hashes not resolved | Resolved by QoreChain: use the 0x hash on the Testnet explorer (D30) | **Resolved** |
 | I27-old | Explorer link for EVM hashes not resolved; links returned to the page | Clicks reloaded History | Notice instead of navigation (v2.12.1); waiting on QoreChain for the hash mapping | Open, Discord request sent |
@@ -301,13 +303,12 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the balance block: enter more WQOR than the balance, confirm the warning appears and Swap stays disabled.
-2. Live test the success popup and cleared amount after a trade.
-3. Live test History: first load, then a second load to confirm only new blocks are scanned.
+1. Check the relayer window `max_value` and `remaining_txs`. A launch needs the 10 QOR seed deposit, the approval, and the launch itself.
+2. Relaunch Proofkick once the window shows enough `max_value`, then read the queue record or relay response for the exact error if it fails.
+3. Relaunch Proofkick on v3 so it can be traded (I20).
 4. Live test a trade hash link on the Testnet explorer (D30).
-5. Relaunch Proofkick on v3 so it can be traded (I20).
-6. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
-7. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+5. Confirm the relayer window renewal (Q2) and set `max_value` per session (Q7).
+6. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
 
 ## 14. Swap Design (route A in use)
 

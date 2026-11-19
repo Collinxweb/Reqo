@@ -57,7 +57,7 @@ module.exports = async (req, res) => {
         results.push({ id, status: "submitted", txHash: tx.hash });
       } catch (e) {
         rec.status = "error";
-        rec.error = e.shortMessage || e.message;
+        rec.error = C.rpcError(e);
         results.push({ id, status: "error", error: rec.error });
       }
 

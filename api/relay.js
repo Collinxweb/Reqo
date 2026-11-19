@@ -69,6 +69,6 @@ module.exports = async (req, res) => {
     }
     return res.status(200).json({ id, status: "submitted", txHash: tx.hash, creator: r.creator });
   } catch (e) {
-    return res.status(400).json({ error: e.shortMessage || e.message });
+    return res.status(400).json({ error: C.rpcError(e) });
   }
 };
