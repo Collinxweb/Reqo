@@ -223,6 +223,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.12.1 | 2026-11-18 | (pending) | Hash links that the explorer has not resolved no longer navigate back to the page; they show a notice. Explorer format request drafted for QoreChain Discord. |
 | v2.12.0 | 2026-11-18 | (pending) | Trade page: swap blocked with a warning when the amount exceeds the wallet balance (the pool previously reverted with 'unknown custom error'). Amount clears and a success popup shows the trade and its hash after each swap. Pool fee (0.3%, stays in the pool) shown on the card. History scans in parallel and caches results per wallet, so later visits only scan new blocks. Lookback reduced to 100,000 blocks for the first scan. |
 | v2.11.2 | 2026-11-18 | (pending) | History chunks sized to 9,000 blocks to fit the RPC cap of 10,000 blocks per log query (measured from the RPC: 'maximum [from, to] blocks distance: 10000'). |
 | v2.11.1 | 2026-11-18 | (pending) | History reads the chain in chunks that shrink on RPC error (log range limit), and shows the RPC's own error message. |
@@ -273,6 +274,7 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I21 | Relayer needs WQOR and an approval for every v3 launch | Launch fails if the relayer runs out of WQOR or QOR | Relayer tops up and approves before each launch (`ensureSeed`) | Built in v2.9.0, pending live test |
+| I27 | Explorer link for EVM hashes not resolved; links returned to the page | Clicks reloaded History | Notice instead of navigation (v2.12.1); waiting on QoreChain for the hash mapping | Open, Discord request sent |
 | I25 | History first load was slow (sequential scan over 200,000 blocks) | Waiting time on History | Parallel scan, per-wallet cache, 100,000-block first lookback (v2.12.0) | Built, pending live test |
 | I26 | Swap with an amount above balance reverted with 'execution reverted (unknown custom error)' | Confusing error | Client-side balance check (D29) | Built, pending live test |
 | I24 | RPC rejects log queries over 10,000 blocks (measured) | History fails without chunking | Chunks of 9,000 blocks (v2.11.2) | Built, pending live test |

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.12.0 trade -->
+<!-- version: v2.12.1 trade -->
 <title>Reqo Trade</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -234,7 +234,11 @@ function hashLink(h) {
   const a = document.createElement("a");
   a.href = "#"; a.target = "_blank"; a.rel = "noopener"; a.textContent = h;
   a.style.color = "var(--accent)"; a.style.fontWeight = "800";
-  explorerHref(h).then((u) => { if (u) a.href = u; });
+  let resolved = false;
+  explorerHref(h).then((u) => { if (u) { a.href = u; resolved = true; } });
+  a.addEventListener("click", (e) => {
+    if (!resolved) { e.preventDefault(); toast("Explorer link not available for this hash yet."); }
+  });
   return a;
 }
 function setStatus(t) {
