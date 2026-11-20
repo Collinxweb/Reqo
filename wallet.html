@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.1 wallet -->
+<!-- version: v2.15.2 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -495,7 +495,8 @@ async function start() {
 start();
 </script>
 <script type="module">
-import { ml_dsa87 } from "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js";
+const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js";
+let ml_dsa87 = null;
 
 const $ = (id) => document.getElementById(id);
 const enc = new TextEncoder();
@@ -506,6 +507,19 @@ const keyId = (addr) => "reqo-pqc-" + addr.toLowerCase();
 const PBKDF2_ITER = 600000;
 
 function say(text) { $("pqcMsg").textContent = text; }
+async function loadLib() {
+  try {
+    const mod = await import(LIB_URL);
+    ml_dsa87 = mod.ml_dsa87;
+    if (!ml_dsa87 || typeof ml_dsa87.keygen !== "function") throw new Error("ml_dsa87 export not found");
+  } catch (e) {
+    say("Key library did not load (" + e.message + "). Post-quantum key features are unavailable on this page load.");
+  }
+}
+function needLib() {
+  if (!ml_dsa87) { say("Key library is not loaded. Reload the page; if this repeats, tell the team the library failed to load."); return false; }
+  return true;
+}
 async function account() {
   const acc = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
   return acc[0] || null;
@@ -543,6 +557,7 @@ async function render() {
 }
 
 async function createKey() {
+  if (!needLib()) return;
   const addr = await account();
   if (!addr) return say("Connect your wallet first.");
   if (load(addr)) return say("A key already exists for this wallet on this device.");
@@ -574,6 +589,7 @@ async function unlockSecret(rec, pass) {
 }
 
 async function testKey() {
+  if (!needLib()) return;
   const addr = await account();
   const rec = addr && load(addr);
   if (!rec) return say("No key on this device.");
@@ -635,6 +651,7 @@ function deleteKey() {
 }
 
 $("pqcMake").onclick = createKey;
+loadLib();
 $("pqcTest").onclick = testKey;
 $("pqcBackup").onclick = backup;
 $("pqcImport").onclick = importBackup;
