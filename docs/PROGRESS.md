@@ -226,6 +226,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.15.1 | 2026-11-20 | (pending) | Post-quantum card: a Connect wallet button inside the card, and the card refreshes after connecting, switching accounts, or the header Connect. Previously the card stayed on 'Connect your wallet' because nothing triggered a refresh after connecting. |
 | v2.15.0 | 2026-11-20 | (pending) | Wallet: post-quantum key card (Phase 1). ML-DSA-87 keypair generated in the browser (`@noble/post-quantum` 0.5.2 via jsDelivr, unverified until checked), private key encrypted with AES-GCM under a PBKDF2 (SHA-256, 600,000 iterations) key from a passphrase of 12+ characters, stored per wallet. Signature test, encrypted backup download, restore, and delete. Nothing is registered on chain yet. |
 | v2.14.2 | 2026-11-20 | (pending) | Wallet shows token images from the description's `img:` link (Vercel Blob) with a letter fallback. Tapping a token row, or its Swap button, opens Trade for that token. WQOR and QOR are not swappable from their rows. |
 | v2.14.1 | 2026-11-20 | (pending) | Wallet page restyled to the agreed layout: wallet card with native QOR balance, Send and Receive actions, Your Tokens list with a chevron to send, History, Trades, and Activity tabs, and the bottom bar arrangement. USD values are not shown until a price feed exists. |

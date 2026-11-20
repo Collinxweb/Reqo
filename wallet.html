@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.0 wallet -->
+<!-- version: v2.15.1 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -132,6 +132,7 @@ nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;backgr
       <input id="pqcFile" class="field" type="file" accept="application/json">
       <button class="ghost" id="pqcImport">Import backup</button>
     </div>
+    <button class="go" id="pqcConnect" hidden>Connect wallet</button>
     <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
     <div class="note">Registration on QoreChain is not done here yet. It will go through QoreX, which signs the registration with your account key.</div>
   </div>
@@ -472,7 +473,7 @@ async function loadHistory() {
 }
 
 $("walletBtn").onclick = async () => {
-  try { await getSigner(); await loadAssets(); await loadHistory(); }
+  try { await getSigner(); await loadAssets(); await loadHistory(); if (window.pqcRender) await window.pqcRender(); }
   catch (e) { setStatus("Error: " + rpcError(e)); }
 };
 
@@ -529,6 +530,7 @@ async function render() {
   $("pqcCreate").hidden = true;
   $("pqcUse").hidden = true;
   $("pqcImportBox").hidden = true;
+  $("pqcConnect").hidden = !!addr;
   if (!addr) { $("pqcState").textContent = "Connect your wallet to manage a key."; return; }
   if (!rec) {
     $("pqcState").textContent = "No key on this device for this wallet.";
@@ -637,7 +639,14 @@ $("pqcTest").onclick = testKey;
 $("pqcBackup").onclick = backup;
 $("pqcImport").onclick = importBackup;
 $("pqcDelete").onclick = deleteKey;
-$("walletBtn").addEventListener("click", () => setTimeout(render, 600));
+$("pqcConnect").onclick = async () => {
+  if (!window.ethereum) return say("Open this page in a wallet browser.");
+  try { await window.ethereum.request({ method: "eth_requestAccounts" }); }
+  catch (e) { return say("Connection was not approved."); }
+  await render();
+};
+if (window.ethereum && window.ethereum.on) window.ethereum.on("accountsChanged", () => render());
+window.pqcRender = render;
 render();
 </script>
 </body>
