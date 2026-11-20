@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.4 wallet -->
+<!-- version: v2.15.5 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -105,7 +105,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="lbl">AMOUNT</div>
     <input id="amt" class="field" inputmode="decimal" placeholder="0.0">
     <button class="go" id="send">Send</button>
-    <div class="note">You pay gas from your wallet. Sending needs an open window for your account. Native QOR transfers are not listed in history yet.</div>
+    <div class="note">Direct sends from your wallet need a registered ML-DSA-87 key and an open authorisation window on your account. Until the key is registered, use Swap, which is relayed. Native QOR transfers are not listed in history yet.</div>
   </div>
 
   <div class="card" id="recvPanel" hidden>
@@ -122,7 +122,9 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="xrow"><div class="xhead">2. Relayer</div>
       <div class="xbody">You sign a request, and our relayer sends the transaction for you, so you pay no gas. The relayer can only submit what you signed. It runs only while its window is open, and it has spending limits.</div></div>
     <div class="xrow"><div class="xhead">3. Post-quantum key (ML-DSA-87)</div>
-      <div class="xbody">A separate key, created on this device and encrypted with your passphrase. It is not registered on QoreChain yet, so it does not change how launches or trades work today. Registration will go through QoreX once confirmed.</div></div>
+      <div class="xbody">A key created on this device and encrypted with your passphrase. The chain only uses a key once it is registered to your account. Direct sends from your wallet need a registered key and an open window. Relayed trades and launches do not need your key, but the relayer's account must meet the same rule.</div></div>
+    <div class="xrow"><div class="xhead">How to register</div>
+      <div class="xbody">QoreX: if your account is QoreX-derived, QoreX registers the key on its first transaction. Developers: use the native CLI or SDK <code>pqc register-key</code> with proof of possession.</div></div>
     <div class="xnote">Losing your passphrase means losing the post-quantum key. Back it up from the card below.</div>
     <button class="go" id="explainClose">Got it</button>
   </dialog>
@@ -131,6 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <h3>Post-quantum key (ML-DSA-87)</h3>
     <div class="note" style="margin-top:0">Generated in your browser. The private key never leaves this device. It is stored encrypted with your passphrase. If you lose the passphrase, the key cannot be recovered.</div>
     <div id="pqcState" class="tsub" style="margin:10px 0">Connect your wallet to manage a key.</div>
+    <div id="pqcReg" class="tsub" style="margin:0 0 10px">Chain registration status: not checked.</div>
     <div id="pqcCreate" hidden>
       <div class="lbl">PASSPHRASE (12+ characters)</div>
       <input id="pqcPass1" class="field" type="password" autocomplete="new-password">
@@ -152,7 +155,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     </div>
     <button class="go" id="pqcConnect" hidden>Connect wallet</button>
     <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
-    <div class="note">Registration on QoreChain is not done here yet. It will go through <a href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">QoreX</a>, the official QoreChain wallet, once QoreChain confirms the registration flow. QoreX is a Firefox add-on, so it installs in Firefox, not Brave.</div>
+    <div class="note">Registration paths: <a href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">QoreX</a>, the official QoreChain wallet (Firefox add-on, not installable in Brave), for QoreX-derived accounts. Developers can register with the native CLI or SDK <code>pqc register-key</code>. Registration is not done from this page yet.</div>
     <button class="ghost" id="howBtn">How wallets work here</button>
   </div>
 
@@ -561,6 +564,19 @@ async function fingerprint(pk) {
   return hex(d.slice(0, 8)).match(/../g).join(":");
 }
 
+async function loadRegistration(addr) {
+  const el = $("pqcReg");
+  el.textContent = "Chain registration status: checking...";
+  try {
+    const r = await fetch("https://api-testnet.qore.host/qorechain/pqc/v1/account/" + addr);
+    if (!r.ok) { el.textContent = "Chain registration status: could not read (HTTP " + r.status + ")."; return; }
+    const j = await r.json();
+    el.textContent = "Chain registration status (raw): " + JSON.stringify(j).slice(0, 240);
+  } catch (e) {
+    el.textContent = "Chain registration status: unavailable right now.";
+  }
+}
+
 async function render() {
   const addr = await account();
   const rec = addr ? load(addr) : null;
@@ -575,8 +591,9 @@ async function render() {
     $("pqcImportBox").hidden = false;
     return;
   }
-  $("pqcState").textContent = "Key stored on this device. Fingerprint " + rec.fp + ". Created " + new Date(rec.createdAt).toLocaleDateString() + ". Not registered on chain.";
+  $("pqcState").textContent = "Key stored on this device. Fingerprint " + rec.fp + ". Created " + new Date(rec.createdAt).toLocaleDateString() + ".";
   $("pqcUse").hidden = false;
+  loadRegistration(addr);
 }
 
 async function createKey() {
