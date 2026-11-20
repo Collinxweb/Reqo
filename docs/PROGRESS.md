@@ -186,6 +186,7 @@ The SDK defaults point to localhost. The public URLs above are the ones used.
 | D18 | Launch seeds the pool with the full token supply and a fixed 10 WQOR, with no creator allocation and no liquidity withdrawal | Removes the rug path: the creator cannot take tokens or liquidity. | **Implemented and verified** (v3 launch on Diana) |
 | D27 | Transaction hashes are shown as links; no manual verify step | Users should not copy hashes. | **Implemented** (v2.11.0) |
 | D29 | Swaps are blocked client-side when the amount exceeds the balance, and the message names the token and balance | The pool reverts with an unreadable custom error otherwise. | **Implemented** (v2.12.0), pending live test |
+| D32 | Registration of ML-DSA-87 keys on chain goes through QoreX, which signs the registration with the account key | Chosen by the team. Not built yet; waiting on QoreChain's confirmation of the path. | **Decided**, Phase 2 pending |
 | D31 | Wallet history reads token Transfer events and launch events from the chain; native QOR is not in history until its transfer source is confirmed | Native QOR moves without event logs. | **Implemented** (v2.14.0), native history open |
 | D30 | Explorer links use the EVM hash directly: `https://dashboard.qorechain.io/explorer/tx/<0x hash>`, with the explorer set to Testnet | Confirmed by QoreChain. Removes the Cosmos lookup. | **Implemented** (v2.13.0) |
 | D28 | The explorer keys transactions by the Cosmos hash, so EVM hashes are mapped to it through the chain REST API before linking | The EVM hash alone opens 'Transaction Not Found'. | **Implemented**, mapping unverified on QoreChain; falls back to the plain hash |
@@ -225,6 +226,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.15.0 | 2026-11-20 | (pending) | Wallet: post-quantum key card (Phase 1). ML-DSA-87 keypair generated in the browser (`@noble/post-quantum` 0.5.2 via jsDelivr, unverified until checked), private key encrypted with AES-GCM under a PBKDF2 (SHA-256, 600,000 iterations) key from a passphrase of 12+ characters, stored per wallet. Signature test, encrypted backup download, restore, and delete. Nothing is registered on chain yet. |
 | v2.14.2 | 2026-11-20 | (pending) | Wallet shows token images from the description's `img:` link (Vercel Blob) with a letter fallback. Tapping a token row, or its Swap button, opens Trade for that token. WQOR and QOR are not swappable from their rows. |
 | v2.14.1 | 2026-11-20 | (pending) | Wallet page restyled to the agreed layout: wallet card with native QOR balance, Send and Receive actions, Your Tokens list with a chevron to send, History, Trades, and Activity tabs, and the bottom bar arrangement. USD values are not shown until a price feed exists. |
 | v2.14.0 | 2026-11-20 | (pending) | Wallet page (`wallet.html`) unlocked from the bottom bar on Home and Trade. Shows native QOR, WQOR, and every Reqo token balance; Send (native QOR, WQOR, tokens) and Receive (address with copy); history of launches, trades, WQOR allowances, and token transfers, cached per wallet. Native QOR transfers are not listed in history yet (no logs). |
@@ -280,6 +282,7 @@ Newest first.
 | I17 | Image upload returned "image storage not configured" until the Vercel Blob store was connected | Images could not be saved | Connect a Blob store to the project and redeploy | Resolved by the project owner, pending live test |
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
+| I31 | ML-DSA-87 library version and export names not yet checked against the package | Key generation could fail or be wrong | Check `@noble/post-quantum@0.5.2` exposes `ml_dsa87` with keygen, sign, verify before first use | Open, check requested |
 | I30 | ML-DSA-87 key for users: native registration is `MsgRegisterPQCKeyV2`, a Cosmos transaction signed with the account's secp256k1 key. MetaMask cannot sign it. The EVM lane status is unclear: our earlier notes say EVM transactions need a registered key and window; QoreChain says the EVM lane verifies classical signatures today. | Users depend on the relayer for launches and trades | Confirm the EVM requirement and the registration path with QoreChain before building key generation | Open, question sent |
 | I29 | Native QOR wallet model not yet documented (address, signing, and send path for qor1 addresses) | Native QOR send and history depend on it | Research the native wallet and its transfer history source | Open, next item |
 | I28 | Queued launch processed with the window live failed with 'could not coalesce error' (signature passed; failure on chain, cause unknown) | Queued launch lost; relaunch needed | Error detail now recorded (v2.13.1); check window max_value and relayer WQOR/approval before relaunch | Open, pending error detail |
@@ -309,11 +312,11 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Live test the restyled Wallet page in both themes: balances for each asset, Send of WQOR and a token, Receive copy, and history after a launch and a trade.
-2. Research the native QOR wallet: how qor1 addresses are derived, how native transfers are signed, and where native transfers can be read (I29).
-3. Add native QOR transfers to history once a source is confirmed.
-4. Relaunch Proofkick and read the relayer error text if it fails (I28).
-5. Address I9 (nonce management) and I10 (persistent rate limit) before public use.
+1. Verify the ML-DSA library export and version (I31), then test key creation, signature test, backup, restore, and delete on a phone.
+2. Get QoreChain's answers to the three ML-DSA questions. Phase 2 (registration through QoreX) waits on them.
+3. Native QOR as the default wallet account: balances and transfers first (Phase 3).
+4. Relaunch Proofkick through the relayer and read the error text if it fails (I28).
+5. Move the relayer to a dedicated testnet account and persist the rate limit (I9, I10).
 
 ## 14. Swap Design (route A in use)
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.14.2 wallet -->
+<!-- version: v2.15.0 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -107,6 +107,33 @@ nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;backgr
     <div class="addr" id="recvAddr">Connect your wallet to see your address.</div>
     <button class="ghost" id="copyAddr">Copy address</button>
     <div class="note">Send QOR, WQOR, or any Reqo token to this address on Diana testnet (chain 9800).</div>
+  </div>
+
+  <div class="card" id="pqcCard">
+    <h3>Post-quantum key (ML-DSA-87)</h3>
+    <div class="note" style="margin-top:0">Generated in your browser. The private key never leaves this device. It is stored encrypted with your passphrase. If you lose the passphrase, the key cannot be recovered.</div>
+    <div id="pqcState" class="tsub" style="margin:10px 0">Connect your wallet to manage a key.</div>
+    <div id="pqcCreate" hidden>
+      <div class="lbl">PASSPHRASE (12+ characters)</div>
+      <input id="pqcPass1" class="field" type="password" autocomplete="new-password">
+      <div class="lbl">CONFIRM PASSPHRASE</div>
+      <input id="pqcPass2" class="field" type="password" autocomplete="new-password">
+      <button class="go" id="pqcMake">Create key</button>
+    </div>
+    <div id="pqcUse" hidden>
+      <div class="lbl">PASSPHRASE</div>
+      <input id="pqcUnlock" class="field" type="password" autocomplete="current-password">
+      <button class="ghost" id="pqcTest">Unlock and run signature test</button>
+      <button class="ghost" id="pqcBackup">Download encrypted backup</button>
+      <button class="ghost" id="pqcDelete">Delete key from this device</button>
+    </div>
+    <div id="pqcImportBox" hidden>
+      <div class="lbl">RESTORE FROM BACKUP</div>
+      <input id="pqcFile" class="field" type="file" accept="application/json">
+      <button class="ghost" id="pqcImport">Import backup</button>
+    </div>
+    <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
+    <div class="note">Registration on QoreChain is not done here yet. It will go through QoreX, which signs the registration with your account key.</div>
   </div>
 
   <div class="card">
@@ -465,6 +492,153 @@ async function start() {
   setInterval(loadAssets, 30000);
 }
 start();
+</script>
+<script type="module">
+import { ml_dsa87 } from "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js";
+
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+const b64 = (u8) => btoa(String.fromCharCode(...u8));
+const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
+const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, "0")).join("");
+const keyId = (addr) => "reqo-pqc-" + addr.toLowerCase();
+const PBKDF2_ITER = 600000;
+
+function say(text) { $("pqcMsg").textContent = text; }
+async function account() {
+  const acc = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
+  return acc[0] || null;
+}
+function load(addr) {
+  try { return JSON.parse(localStorage.getItem(keyId(addr))); } catch (e) { return null; }
+}
+async function deriveKey(pass, salt) {
+  const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: PBKDF2_ITER, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function fingerprint(pk) {
+  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", pk));
+  return hex(d.slice(0, 8)).match(/../g).join(":");
+}
+
+async function render() {
+  const addr = await account();
+  const rec = addr ? load(addr) : null;
+  $("pqcCreate").hidden = true;
+  $("pqcUse").hidden = true;
+  $("pqcImportBox").hidden = true;
+  if (!addr) { $("pqcState").textContent = "Connect your wallet to manage a key."; return; }
+  if (!rec) {
+    $("pqcState").textContent = "No key on this device for this wallet.";
+    $("pqcCreate").hidden = false;
+    $("pqcImportBox").hidden = false;
+    return;
+  }
+  $("pqcState").textContent = "Key stored on this device. Fingerprint " + rec.fp + ". Created " + new Date(rec.createdAt).toLocaleDateString() + ". Not registered on chain.";
+  $("pqcUse").hidden = false;
+}
+
+async function createKey() {
+  const addr = await account();
+  if (!addr) return say("Connect your wallet first.");
+  if (load(addr)) return say("A key already exists for this wallet on this device.");
+  const p1 = $("pqcPass1").value, p2 = $("pqcPass2").value;
+  if (p1.length < 12) return say("Passphrase must be at least 12 characters.");
+  if (p1 !== p2) return say("Passphrases do not match.");
+
+  const { publicKey, secretKey } = ml_dsa87.keygen();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const k = await deriveKey(p1, salt);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, secretKey));
+  const rec = {
+    v: 1, alg: "ML-DSA-87", address: addr,
+    pk: b64(publicKey), fp: await fingerprint(publicKey),
+    salt: b64(salt), iv: b64(iv), sk: b64(ct),
+    createdAt: new Date().toISOString(),
+  };
+  secretKey.fill(0);
+  localStorage.setItem(keyId(addr), JSON.stringify(rec));
+  $("pqcPass1").value = ""; $("pqcPass2").value = "";
+  say("Key created. Back it up now.");
+  await render();
+}
+
+async function unlockSecret(rec, pass) {
+  const k = await deriveKey(pass, unb64(rec.salt));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(rec.iv) }, k, unb64(rec.sk)));
+}
+
+async function testKey() {
+  const addr = await account();
+  const rec = addr && load(addr);
+  if (!rec) return say("No key on this device.");
+  const pass = $("pqcUnlock").value;
+  if (!pass) return say("Enter your passphrase.");
+  let sk;
+  try { sk = await unlockSecret(rec, pass); }
+  catch (e) { return say("Wrong passphrase, or the stored key is damaged."); }
+  const pk = unb64(rec.pk);
+  const message = enc.encode("reqo-pqc-test:" + addr.toLowerCase() + ":" + Date.now());
+  const sig = ml_dsa87.sign(message, sk);
+  const ok = ml_dsa87.verify(sig, message, pk);
+  sk.fill(0);
+  say(ok
+    ? "Signature test passed. Public key " + pk.length + " bytes, signature " + sig.length + " bytes."
+    : "Signature test failed. Do not use this key.");
+}
+
+function backup() {
+  const addr = null;
+  (async () => {
+    const acc = await account();
+    const rec = acc && load(acc);
+    if (!rec) return say("No key on this device.");
+    const blob = new Blob([JSON.stringify(rec, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "reqo-pqc-backup-" + acc.toLowerCase().slice(0, 10) + ".json";
+    a.click();
+    URL.revokeObjectURL(a.href);
+    say("Backup downloaded. It is encrypted; keep it and your passphrase safe.");
+  })();
+}
+
+async function importBackup() {
+  const addr = await account();
+  if (!addr) return say("Connect your wallet first.");
+  const file = $("pqcFile").files[0];
+  if (!file) return say("Choose a backup file.");
+  let rec;
+  try { rec = JSON.parse(await file.text()); } catch (e) { return say("That file is not a valid backup."); }
+  if (rec.alg !== "ML-DSA-87" || !rec.sk || !rec.pk || !rec.salt || !rec.iv) return say("That file is not a Reqo key backup.");
+  if (String(rec.address).toLowerCase() !== addr.toLowerCase()) return say("This backup belongs to a different wallet.");
+  if (load(addr)) return say("A key already exists for this wallet. Delete it first to restore.");
+  localStorage.setItem(keyId(addr), JSON.stringify(rec));
+  say("Backup restored. Enter your passphrase to test it.");
+  await render();
+}
+
+function deleteKey() {
+  (async () => {
+    const addr = await account();
+    if (!addr) return;
+    if (!confirm("Delete this key from this device? Without a backup it cannot be recovered.")) return;
+    localStorage.removeItem(keyId(addr));
+    say("Key deleted from this device.");
+    await render();
+  })();
+}
+
+$("pqcMake").onclick = createKey;
+$("pqcTest").onclick = testKey;
+$("pqcBackup").onclick = backup;
+$("pqcImport").onclick = importBackup;
+$("pqcDelete").onclick = deleteKey;
+$("walletBtn").addEventListener("click", () => setTimeout(render, 600));
+render();
 </script>
 </body>
 </html>
