@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.17.0 wallet -->
+<!-- version: v2.17.1 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -134,7 +134,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="note">Send QOR, WQOR, or any Reqo token to this address on Diana testnet (chain 9800).</div>
   </div>
 
-  <dialog id="onboard">
+  <dialog id="onboard" onclick="if(event.target===this){try{localStorage.setItem('reqo-onboard-v2','1')}catch(e){};document.getElementById('onboard').close();}">
     <div class="ob-title">Get your quantum-safe account</div>
     <div class="ob-sub">Your ML-DSA-87 key is what protects your QOR on QoreChain. Set it up once through QoreX.</div>
 
@@ -156,22 +156,24 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 
     <div class="ob-step"><div class="ob-num">3</div><div class="ob-body">
       <div class="ob-head">Send your first QoreChain transaction</div>
-      <div class="ob-text">QoreX registers your ML-DSA-87 key on the first transaction it signs. Your account is then ready for direct transactions while a window is open.</div>
+      <div class="ob-text">First, get test QOR. Open the QoreChain dashboard, go to Faucet, and request QOR for your qor1 address, which the account card shows.</div>
+      <a class="ob-store" href="https://dashboard.qorechain.io" target="_blank" rel="noopener">QOR Faucet <span><small>QoreChain dashboard, then Faucet</small>dashboard.qorechain.io</span></a>
+      <div class="ob-text">Then, in QoreX, send a small amount of QOR to another address you control. QoreX signs the transaction and registers your ML-DSA-87 key on this first transaction.</div>
     </div></div>
 
     <div class="ob-step"><div class="ob-num">4</div><div class="ob-body">
       <div class="ob-head">Come back here</div>
-      <div class="ob-text">The Your quantum-safe account card shows your address, registration status, and window status.</div>
+      <div class="ob-text">The card titled Your quantum-safe account shows your address, registration status, and window status.</div>
     </div></div>
 
     <div class="ob-divider">Or start now without registering</div>
     <div class="ob-step"><div class="ob-num alt">R</div><div class="ob-body">
       <div class="ob-head">Use Reqo through the relayer</div>
       <div class="ob-text">Swap and launch here. You sign the request, and the relayer submits it, so you pay no gas and do not need a registered key. Limits apply, and the relayer runs only while its window is open.</div>
-      <button class="ob-go" id="obRelayer">Continue with the relayer</button>
+      <button class="ob-go" id="obRelayer" onclick="try{localStorage.setItem('reqo-onboard-v2','1')}catch(e){};document.getElementById('onboard').close();">Continue with the relayer</button>
     </div></div>
 
-    <button class="go" id="onbClose">Got it</button>
+    <button class="go" id="onbClose" onclick="try{localStorage.setItem('reqo-onboard-v2','1')}catch(e){};document.getElementById('onboard').close();">Got it</button>
     <div class="ob-note">Your registered key lives in QoreX. Reqo never asks for your QoreX unlock.</div>
   </dialog>
 

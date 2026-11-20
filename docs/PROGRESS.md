@@ -230,6 +230,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.17.1 | 2026-11-20 | (pending) | Onboarding: 'Got it' and 'Continue with the relayer' close the guide with inline handlers (independent of script order); backdrop click closes it. Step 3 explains the first transaction: request test QOR from the QoreChain dashboard Faucet for the qor1 address, then send from QoreX. Step 4 wording fixed. |
 | v2.17.0 | 2026-11-20 | (pending) | Wallet: passphrase key card removed. Replaced with 'Your quantum-safe account': qor1 address derived from the connected 0x address (bech32, verified against the owner account), registration response, and live window status. Direct sends check the window first and stop with a message if it is closed. Swap and launch unchanged. Linking is address-based (option 1). |
 | v2.16.1 | 2026-11-20 | (pending) | Onboarding step 1 lists the App Store link (`apps.apple.com`, store home, app page ID not yet known), Google Play (`network.qore.qorex`), and the Firefox desktop add-on. Store logos are simplified SVG drawings, to be replaced with official Apple and Google badges. Chrome desktop link pending. |
 | v2.16.0 | 2026-11-20 | (pending) | Wallet: first-visit onboarding popup. Step 1 install QoreX (Firefox add-on verified; Android, iOS, and Chrome links pending QoreChain confirmation). Step 2 create or import the account. Step 3 first transaction registers the ML-DSA-87 key. Step 4 return and check status. Below it, the relayer path. Shown once on first touch; reopened by the setup button. |
@@ -295,6 +296,7 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I36 | Option 1 assumes one seed gives the same 0x and qor1 account in QoreX and MetaMask | If not, linking is to a different account and direct sends show 'closed' | Ask QoreChain; confirm with a test seed before launch | Open, question to QoreChain |
+| I38 | Onboarding close buttons did not dismiss the guide | Users could not leave the guide | Inline handlers (v2.17.1); pending live test | Built |
 | I37 | Account endpoint takes a qor1 address (assumed); response fields unknown | Registration shows raw text only | Confirm format on docs.qorechain.io | Open |
 | I33 | Browser-generated key is not the key QoreChain registers. QoreX registers its own key. | Users may think the card's key is registered | Onboarding and the card say so; decide whether the card stays as backup-only or is removed | Open, decision needed |
 | I32 | Account endpoint takes which address format, and what are its response fields? | Card shows raw response only | Confirm on docs.qorechain.io; map fields to Registered / Not registered | Open |
