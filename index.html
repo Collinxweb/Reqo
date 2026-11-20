@@ -3,507 +3,422 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.14.0 -->
-<title>Reqo v2.14.0</title>
+<!-- version: v3.0.0 launch -->
+<title>Reqo Launch</title>
 <link rel="icon" href="logo.png">
-<script>try{document.documentElement.dataset.theme=localStorage.getItem("reqo-theme")||"dark"}catch(e){document.documentElement.dataset.theme="dark"}</script>
+<script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+
+
 <style>
 :root[data-theme="dark"]{--bg:#0a0c0b;--card:#13161a;--card2:#1a1e22;--line:#252a2f;--ink:#f2f5f3;--muted:#8b9590;--accent:#c6ff1a;--accentInk:#0a0c0b;--good:#2bd27a;--bad:#ff6b6b;--glow:rgba(198,255,26,.25)}
 :root[data-theme="light"]{--bg:#f2f5f3;--card:#ffffff;--card2:#f6f9f7;--line:#dbe3de;--ink:#0d1210;--muted:#66716c;--accent:#b5ec00;--accentInk:#0d1210;--good:#14885a;--bad:#c23b3b;--glow:rgba(181,236,0,.35)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
-body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:96px}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink);padding-bottom:110px}
 .wrap{max-width:460px;margin:0 auto;padding:14px}
 header{display:flex;align-items:center;gap:10px;padding:4px 0 14px}
-header img.logo{width:40px;height:40px;border-radius:10px}
+header img{width:40px;height:40px;border-radius:10px}
 .brand{font-weight:900;font-size:24px;letter-spacing:.5px}
-.spacer{flex:1}
+.sp{flex:1}
 .pill{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:9px 14px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap}
 .icon{width:42px;height:42px;border-radius:50%;border:1px solid var(--accent);background:var(--card);color:var(--ink);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:8px 14px;font-size:14px;cursor:pointer;text-decoration:none}
-.chips{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chip{flex:0 0 auto;border:1px solid var(--line);background:var(--card);color:var(--muted);border-radius:999px;padding:8px 14px;font-size:13px;font-weight:800;letter-spacing:.3px;cursor:pointer}
-.chip.on{background:var(--accent);color:var(--accentInk);border-color:var(--accent);box-shadow:0 0 16px var(--glow)}
-.search{display:flex;gap:8px;margin-bottom:10px}
-.search input{flex:1;padding:12px 14px;border-radius:14px;border:1px solid var(--line);font-size:15px;background:var(--card);color:var(--ink)}
-.search button{width:46px;border-radius:14px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:18px;cursor:pointer}
-.banner{margin:6px 0 10px;padding:12px 14px;border-radius:16px;font-size:14px;background:var(--card);border:1px solid var(--accent)}
-.banner.pending{border-color:#d9b84a}
-.banner.closed{border-color:var(--bad)}
-.sec{font-size:13px;color:var(--muted);margin:4px 2px 8px}
-.list{display:flex;flex-direction:column;gap:10px}
-.row{display:flex;gap:12px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:20px;padding:12px;text-decoration:none;color:inherit}
-.avatar{width:54px;height:54px;border-radius:50%;flex:0 0 54px;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;overflow:hidden}
-.avatar img{width:100%;height:100%;object-fit:cover}
-.info{flex:1;min-width:0}
-.name{font-weight:800;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ticker{color:var(--accent);font-weight:800;font-size:13px}
-.sub{color:var(--muted);font-size:12px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.desc{color:var(--muted);font-size:12px;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.right{text-align:right;flex:0 0 auto}
-.big{font-weight:900;font-size:15px}
-.tiny{color:var(--muted);font-size:11px;margin-top:2px}
-.empty{padding:28px 10px;text-align:center;color:var(--muted);font-size:14px}
+.wcard{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--card) 0%,var(--card2) 100%);border:1px solid var(--line);border-radius:24px;padding:18px;display:flex;gap:14px;align-items:center}
+.wcard::after{content:"";position:absolute;right:-40px;top:-30px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,var(--glow),transparent 70%);pointer-events:none}
+.wico{width:64px;height:64px;border-radius:50%;flex:0 0 64px;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:900}
+.wmeta{flex:1;min-width:0}
+.wlabel{font-weight:800;font-size:15px;display:flex;align-items:center;gap:8px}
+.copy{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:2px 6px;font-size:12px;cursor:pointer}
+.waddr{color:var(--muted);font-size:12px;margin-top:2px}
+.wbal{font-size:30px;font-weight:900;margin-top:8px;word-break:break-all}
+.wnet{color:var(--muted);font-size:12px;margin-top:2px}
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:14px 0}
+.abtn{border-radius:999px;padding:16px;font-size:16px;font-weight:900;cursor:pointer;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+.abtn.primary{background:var(--accent);color:var(--accentInk);border-color:var(--accent);box-shadow:0 0 24px var(--glow)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:14px;margin:12px 0}
-.card h3{margin:0 0 8px;font-size:17px;font-weight:900}
-.muted{color:var(--muted)}
-label.lbl{display:block;font-size:12px;color:var(--muted);margin:12px 0 6px;font-weight:800;letter-spacing:.3px}
-.field{width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);font-size:15px;background:var(--card2);color:var(--ink)}
-.hint{color:var(--muted);font-size:12px;margin:6px 0 0}
-.pick{display:flex;align-items:center;gap:12px}
-.prev{width:72px;height:72px;border-radius:18px;background:var(--card2);border:1px dashed var(--line);overflow:hidden;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center}
-.prev img{width:100%;height:100%;object-fit:cover}
+.card h3{margin:0 0 10px;font-size:17px;font-weight:900}
+.trow,.hrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.trow:last-child,.hrow:last-child{border-bottom:0}
+.avatar{width:46px;height:46px;border-radius:50%;flex:0 0 46px;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:18px}
+.avatar.sm{width:40px;height:40px;flex:0 0 40px;font-size:16px;background:var(--card2);color:var(--ink);border:1px solid var(--line)}
+.tinfo{flex:1;min-width:0}
+.tname{font-weight:800;font-size:15px}
+.tsub{color:var(--muted);font-size:12px;margin-top:2px}
+.tamt{font-weight:900;text-align:right;font-size:15px;white-space:nowrap}
+.chev{border:0;background:transparent;color:var(--muted);font-size:24px;cursor:pointer;padding:0 4px}
+.tabs3{display:flex;background:var(--card2);border:1px solid var(--line);border-radius:999px;padding:5px;gap:4px;margin-bottom:10px}
+.tabs3 button{flex:1;border:0;background:transparent;color:var(--muted);font-weight:800;font-size:13px;padding:9px 6px;border-radius:999px;cursor:pointer}
+.tabs3 button.on{background:var(--accent);color:var(--accentInk);box-shadow:0 0 16px var(--glow)}
+.field{width:100%;padding:12px;border-radius:14px;border:1px solid var(--line);font-size:15px;background:var(--card2);color:var(--ink);margin-bottom:8px}
+.lbl{font-size:12px;color:var(--muted);font-weight:800;margin:8px 0 6px;letter-spacing:.3px}
+.go{width:100%;margin-top:10px;padding:15px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-size:16px;font-weight:900;cursor:pointer;box-shadow:0 0 24px var(--glow)}
+.go:disabled{opacity:.5;box-shadow:none}
+.ghost{width:100%;margin-top:8px;padding:12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--ink);font-weight:800;cursor:pointer}
+.addr{word-break:break-all;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;margin-bottom:8px}
+.note{color:var(--muted);font-size:12px;margin-top:8px}
 .status{font-size:14px;margin:10px 4px;min-height:20px;word-break:break-all}
-.primary-wide{width:100%;margin-top:8px;padding:17px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-size:17px;font-weight:900;cursor:pointer;box-shadow:0 0 28px var(--glow)}
-.primary-wide:disabled{opacity:.5;box-shadow:none}
-.more a{color:var(--ink)}
-.item{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px}
-.item:last-child{border-bottom:0}
-.soon{font-size:11px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:3px 9px;font-weight:800}
-nav{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:10px 0 calc(10px + env(safe-area-inset-bottom,0px));z-index:10}
-nav a,nav button{flex:1;background:none;border:0;color:var(--muted);font-size:12px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0;cursor:pointer;text-decoration:none}
-nav .ic{font-size:20px;line-height:1}
-nav .on{color:var(--accent)}
-.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:90%;text-align:center;z-index:20}
-.toast.show{opacity:1}
+nav.bottom{position:fixed;left:8px;right:8px;bottom:8px;background:var(--card);border:1px solid var(--line);border-radius:28px;display:flex;justify-content:space-around;align-items:center;padding:8px 6px calc(8px + env(safe-area-inset-bottom,0px));z-index:10}
+nav.bottom a{flex:1;text-align:center;color:var(--muted);font-size:12px;font-weight:700;text-decoration:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px 0}
+nav.bottom .ic{font-size:20px;line-height:1}
+nav.bottom .on{color:var(--accent)}
+nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;background:var(--accent);color:var(--accentInk);justify-content:center;margin-top:-30px;box-shadow:0 0 26px var(--glow);font-size:24px}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.mini{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:22px;max-width:420px;width:calc(100% - 32px);padding:18px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.xrow{padding:10px 0;border-bottom:1px solid var(--line)}
+.xhead{font-weight:800;font-size:15px}
+.xbody{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}
+.xnote{color:var(--muted);font-size:12px;margin:12px 0 4px}
+#onboard{max-height:88vh;overflow:auto;padding:20px}
+.ob-title{font-weight:900;font-size:19px;margin-bottom:6px}
+.ob-sub{color:var(--muted);font-size:13px;line-height:1.45;margin-bottom:12px}
+.ob-step{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.ob-num{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.ob-num.alt{background:var(--card2);color:var(--ink);border:1px solid var(--line)}
+.ob-body{flex:1;min-width:0}
+.ob-head{font-weight:800;font-size:15px}
+.ob-text{color:var(--muted);font-size:13px;line-height:1.45;margin-top:3px}
+.ob-soon{color:var(--muted);font-size:12px;margin-top:6px}
+.ob-divider{color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.3px;margin:14px 0 2px;text-transform:uppercase}
+.ob-go{margin-top:8px;padding:11px 16px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-weight:900;font-size:14px;cursor:pointer}
+.ob-note{color:var(--muted);font-size:12px;line-height:1.45;margin:14px 0 10px}
+#onboard .go{margin-top:6px}
+.ob-stores{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.ob-store{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--ink);text-decoration:none;font-weight:800;font-size:15px}
+.ob-store small{display:block;font-weight:600;font-size:11px;color:var(--muted);letter-spacing:.2px}
+.ob-logo{width:26px;height:26px;flex:0 0 26px;color:var(--ink)}
+.ob-store span{line-height:1.15}
+
+.chat{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto;padding:4px}
+.msg{max-width:85%;padding:10px 14px;border-radius:16px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.msg.user{align-self:flex-end;background:var(--accent);color:var(--accentInk)}
+.msg.bot{align-self:flex-start;background:var(--card2);border:1px solid var(--line)}
+.inrow{display:flex;gap:8px;margin-top:10px}
+.inrow input{flex:1}
+.send{padding:12px 18px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-weight:900;cursor:pointer}
+.review dt{color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.3px;margin-top:10px}
+.review dd{margin:2px 0 0;font-size:15px;word-break:break-word}
+.thumb{width:72px;height:72px;border-radius:16px;object-fit:cover;border:1px solid var(--line)}
+.step{padding:8px 0;border-bottom:1px solid var(--line);font-size:14px;word-break:break-all}
+.step:last-child{border-bottom:0}
+.bad{color:var(--bad);font-weight:700}
 </style>
 </head>
 <body>
 <div class="wrap">
+  <header>
+    <img src="logo.png" alt="Reqo">
+    <div class="brand">REQO</div>
+    <div class="sp"></div>
+    <button class="icon" id="themeBtn" title="Theme">&#9789;</button>
+    <button class="pill" id="connectBtn">Connect</button>
+  </header>
 
-<header>
-  <img class="logo" src="logo.png" alt="Reqo">
-  <div class="brand">REQO</div>
-  <div class="spacer"></div>
-  <button class="icon" id="themeBtn" title="Theme">&#9789;</button>
-  <button class="pill" id="walletBtn">Connect</button>
-</header>
-
-<!-- BOARD -->
-<section id="view-board">
-  <div class="chips" id="chips">
-    <button class="chip on" data-sort="new">NEW</button>
-    <button class="chip" data-soon="Market cap sorting">MARKET CAP</button>
-    <button class="chip" data-soon="Hot tokens">HOT</button>
-    <button class="chip" data-soon="Volume sorting">VOLUME</button>
-    <button class="chip" data-soon="Holder sorting">HOLDERS</button>
-  </div>
-  <div class="search">
-    <input id="q" placeholder="Search tokens or tickers">
-    <button id="refresh" title="Refresh">&#x21bb;</button>
-  </div>
-  <div id="banner" class="banner">Checking relayer status...</div>
-  <div class="sec" id="count">Loading tokens...</div>
-  <div class="list" id="list"></div>
-</section>
-
-<!-- LAUNCH -->
-<section id="view-launch" style="display:none">
   <div class="card">
-    <h3>Launch a token</h3>
-    <p class="muted" style="margin:0 0 6px">You sign a request in your wallet. No transaction or gas is needed from you. If the relayer window is closed, your launch is queued and submitted automatically when it opens.</p>
-    <label class="lbl">TOKEN IMAGE (OPTIONAL)</label>
-    <div class="pick">
-      <div class="prev" id="prevBox">No image</div>
-      <div style="flex:1">
-        <input id="image" class="field" type="file" accept="image/png,image/jpeg,image/webp">
-        <div class="hint">PNG, JPEG or WebP, up to 1 MB</div>
-      </div>
+    <h3>Launch a memecoin</h3>
+    <div class="note" style="margin-top:0">Tell the agent what you want. Review the details, then sign the transactions in your wallet. The agent never signs for you.</div>
+    <div class="tsub" id="readiness" style="margin-top:10px">Connect your wallet to start.</div>
+  </div>
+
+  <div class="card">
+    <div class="chat" id="chat"></div>
+    <div class="inrow">
+      <input id="msg" class="field" style="margin:0" placeholder="e.g. a frog coin called Croak, 10000 supply">
+      <button class="send" id="sendBtn">Send</button>
     </div>
-    <label class="lbl">NAME</label>
-    <input id="name" class="field" placeholder="e.g. Coweb">
-    <label class="lbl">TICKER</label>
-    <input id="symbol" class="field" placeholder="e.g. CWB (shown as $CWB)">
-    <label class="lbl">SUPPLY</label>
-    <input id="supply" class="field" placeholder="Whole tokens, 1 to 1000000000000">
-    <label class="lbl">DESCRIPTION</label>
-    <input id="desc" class="field" placeholder="Short description (280 bytes max, image link counts)">
+    <div class="inrow" style="align-items:center">
+      <input id="imgFile" type="file" accept="image/png,image/jpeg,image/webp" style="font-size:13px;color:var(--muted)">
+    </div>
+    <div class="tsub" id="imgState" style="margin-top:6px">No image yet. Optional, up to 1 MB.</div>
   </div>
+
+  <div class="card review" id="reviewCard" hidden>
+    <h3>Review before signing</h3>
+    <dl id="reviewList" style="margin:0"></dl>
+    <div class="inrow"><button class="ghost" id="editBtn">Edit</button><button class="go" id="signBtn">Sign and create</button></div>
+    <div class="note">Three transactions: wrap 10 QOR into WQOR, approve the factory for 10 WQOR, then create the token. Your wallet asks you to confirm each one.</div>
+  </div>
+
+  <div class="card" id="stepsCard" hidden>
+    <h3>Transactions</h3>
+    <div id="steps"></div>
+    <div id="result" class="tsub" style="margin-top:10px"></div>
+  </div>
+
   <div class="status" id="status"></div>
-  <button class="primary-wide" id="create">Launch token</button>
-</section>
-
-<!-- MORE -->
-<section id="view-more" style="display:none" class="more">
-  <div class="card">
-    <h3>Reqo</h3>
-    <div class="item"><span>Version</span><span class="muted">v2.10.0 (testnet)</span></div>
-    <div class="item"><span>Network</span><span class="muted">QoreChain Diana, chain 9800</span></div>
-    <div class="item"><span>Factory</span><span class="muted" style="word-break:break-all">0xbEe5...d356</span></div>
-    <div class="item"><span>Documentation</span><a href="docs.html">Open docs</a></div>
-    <div class="item"><span>Source</span><a href="https://github.com/Collinxweb/Reqo">GitHub</a></div>
-  </div>
-  <div class="card">
-    <h3>Coming soon</h3>
-    <div class="item"><span>Trade</span><span class="muted">Open a token on the Board</span></div>
-    <div class="item"><span>Live feed</span><span class="soon">SOON</span></div>
-    <div class="item"><span>Portfolio</span><span class="soon">SOON</span></div>
-    <div class="item"><span>AI trading agent</span><span class="soon">SOON</span></div>
-  </div>
-</section>
-
 </div>
-
-<nav>
-  <button data-tab="board" class="on"><span class="ic">&#8962;</span>Home</button>
-  <a href="trade.html"><span class="ic">&#8644;</span>Trade</a>
-  <button data-tab="launch"><span class="ic">&#128640;</span>Launch</button>
-  <a href="wallet.html"><span class="ic">&#9635;</span>Wallet</a>
-  <button data-tab="more"><span class="ic">&#8943;</span>More</button>
-</nav>
-
-<div class="toast" id="toast"></div>
-
+<div id="toast" style="position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:20"></div>
 <script>
-function applyTheme(t) {
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem("reqo-theme", t); } catch (e) {}
-  document.getElementById("themeBtn").innerHTML = t === "dark" ? "&#9728;" : "&#9789;";
-}
-document.getElementById("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-applyTheme(document.documentElement.dataset.theme || "dark");
 const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
+const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
 const RPC = "https://evm-testnet.qore.host";
 const CHAIN_ID = 9800;
 const CHAIN_HEX = "0x" + CHAIN_ID.toString(16);
-const IMG_HOST = "blob.vercel-storage.com";
-const IMG_PATTERN = /\simg:(https:\/\/\S+)$/;
-const FACTORY_ABI = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)"];
-const TOKEN_ABI = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function totalSupply() view returns (uint256)",
-  "function creator() view returns (address)",
-  "function description() view returns (string)"
+const SEED = ethers.parseEther("10");
+const FACTORY_ABI = [
+  "function createToken(string name, string symbol, uint256 supply, string description) returns (address)",
+  "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)",
 ];
-const domain = { name: "Reqo MemeFactory", version: "3", chainId: CHAIN_ID, verifyingContract: FACTORY };
-const types = {
-  CreateToken: [
-    { name: "creator", type: "address" },
-    { name: "name", type: "string" },
-    { name: "symbol", type: "string" },
-    { name: "supply", type: "uint256" },
-    { name: "description", type: "string" },
-    { name: "nonce", type: "uint256" },
-    { name: "deadline", type: "uint256" }
-  ]
-};
-
-const $ = id => document.getElementById(id);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const short = a => a ? a.slice(0, 6) + "..." + a.slice(-4) : "";
+const WQOR_ABI = [
+  "function balanceOf(address) view returns (uint256)",
+  "function allowance(address,address) view returns (uint256)",
+  "function deposit() payable",
+  "function approve(address,uint256) returns (bool)",
+];
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
-let tokens = [];
-let sortMode = "new";
-let walletAddr = null;
-let pollTimer = null;
+const $ = (id) => document.getElementById(id);
+const enc = new TextEncoder();
+let history = [], draft = null, imageUrl = null, account = null;
 
-function toast(msg) {
-  const t = $("toast");
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(toast._t);
-  toast._t = setTimeout(() => t.classList.remove("show"), 2000);
+function applyTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("reqo-theme", t); } catch (e) {}
+  $("themeBtn").innerHTML = t === "dark" ? "&#9728;" : "&#9789;";
 }
-function soon(name) { toast(name + " is coming soon"); }
+$("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+applyTheme(document.documentElement.dataset.theme || "dark");
 
-function showTab(name) {
-  for (const v of ["board", "launch", "more"]) $("view-" + v).style.display = v === name ? "block" : "none";
-  document.querySelectorAll("nav button[data-tab]").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
-  window.scrollTo(0, 0);
-}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.opacity = "1"; clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.opacity = "0"), 2200); }
+function setStatus(t) { $("status").textContent = t; }
+const short = (a) => a.slice(0, 6) + "..." + a.slice(-4);
+const fmt = (x) => Number(ethers.formatUnits(x, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 });
+function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.toLowerCase(); }
+function hashLink(h) { const a = document.createElement("a"); a.href = explorerUrl(h); a.target = "_blank"; a.rel = "noopener"; a.textContent = h; a.style.color = "var(--accent)"; a.style.fontWeight = "800"; return a; }
 
-document.querySelectorAll("nav button").forEach(b => {
-  b.onclick = () => b.dataset.soon ? soon(b.dataset.soon) : showTab(b.dataset.tab);
-});
-document.querySelectorAll(".chip").forEach(c => {
-  c.onclick = () => {
-    if (c.dataset.soon) return soon(c.dataset.soon);
-    document.querySelectorAll(".chip").forEach(x => x.classList.toggle("on", x === c));
-    sortMode = c.dataset.sort;
-    render();
-  };
-});
-
-async function loadStatus() {
-  try {
-    const s = await (await fetch("/api/status")).json();
-    const b = $("banner");
-    if (s.windowLive) {
-      b.className = "banner";
-      b.textContent = "Relayer window is live. Launches go through instantly.";
-    } else if (s.opensAt && Date.parse(s.opensAt) > Date.now()) {
-      b.className = "banner pending";
-      b.textContent = "Launches pending until " + new Date(s.opensAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) + ". Requests you sign now are queued automatically.";
-    } else {
-      b.className = "banner closed";
-      b.textContent = "Relayer window is closed. Launches you sign now are queued until the next opening.";
-    }
-    if (s.queued) b.textContent += " (" + s.queued + " queued)";
-    return s;
-  } catch (e) {
-    $("banner").className = "banner closed";
-    $("banner").textContent = "Could not reach relayer status: " + e.message;
-    return null;
+const API = "https://api-testnet.qore.host";
+const BECH_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+function bech32Polymod(values) {
+  const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >>> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= G[i];
   }
+  return chk;
 }
-
-async function loadTokens() {
-  $("count").textContent = "Loading tokens...";
-  try {
-    const f = new ethers.Contract(FACTORY, FACTORY_ABI, reader);
-    const n = Number(await f.tokenCount());
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const addr = await f.tokens(i);
-      const t = new ethers.Contract(addr, TOKEN_ABI, reader);
-      const [name, symbol, supply, creator, desc] = await Promise.all([
-        t.name(), t.symbol(), t.totalSupply(), t.creator(), t.description()
-      ]);
-      const m = desc.match(IMG_PATTERN);
-      let img = null;
-      if (m) {
-        try { const u = new URL(m[1]); if (u.hostname.endsWith(IMG_HOST)) img = u.href; } catch (_) {}
-      }
-      out.push({ index: i, addr, name, symbol, creator, img, text: m ? desc.replace(IMG_PATTERN, "") : desc, supply: ethers.formatUnits(supply, 18) });
-    }
-    tokens = out;
-    render();
-  } catch (e) {
-    $("count").textContent = "Error loading tokens: " + (e.shortMessage || e.message);
+function bech32Encode(hrp, bytes) {
+  const data = [];
+  let acc = 0, bits = 0;
+  for (const v of bytes) {
+    acc = ((acc << 8) | v) & 0xffff;
+    bits += 8;
+    while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); }
   }
+  if (bits > 0) data.push((acc << (5 - bits)) & 31);
+  const hrpExp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
+  const pm = bech32Polymod(hrpExp.concat(data, [0, 0, 0, 0, 0, 0])) ^ 1;
+  const checksum = [0, 1, 2, 3, 4, 5].map((i) => (pm >> (5 * (5 - i))) & 31);
+  return hrp + "1" + data.concat(checksum).map((d) => BECH_CHARSET[d]).join("");
+}
+// Same account, two address formats: the 20-byte account is written as qor1... for the chain.
+function qorAddress(evmAddr) {
+  const bytes = (evmAddr.slice(2).match(/../g) || []).map((x) => parseInt(x, 16));
+  return bech32Encode("qor", bytes);
+}
+async function fetchWindow(evmAddr) {
+  const r = await fetch(API + "/qorechain/pqc/v1/evm_window/" + qorAddress(evmAddr));
+  if (!r.ok) throw new Error("window status HTTP " + r.status);
+  return r.json();
 }
 
-function render() {
-  const q = $("q").value.trim().toLowerCase();
-  let list = tokens.filter(t => !q || t.name.toLowerCase().includes(q) || t.symbol.toLowerCase().includes(q));
-  if (sortMode === "new") list = list.slice().reverse();
-  $("count").textContent = list.length + " of " + tokens.length + " tokens on Diana";
-  if (!list.length) {
-    $("list").innerHTML = '<div class="empty">' + (tokens.length ? "No tokens match your search." : "No tokens yet. Launch the first one.") + "</div>";
-    return;
-  }
-  $("list").innerHTML = list.map(t => {
-    const avatar = t.img
-      ? `<img src="${esc(t.img)}" alt="">`
-      : esc((t.symbol[0] || "?").toUpperCase());
-    return `<a class="row" href="trade.html?token=${esc(t.addr)}" style="text-decoration:none;color:inherit">
-      <div class="avatar">${avatar}</div>
-      <div class="info">
-        <div class="name">${esc(t.name)}</div>
-        <div class="ticker">$${esc(t.symbol)}</div>
-        ${t.text ? `<div class="desc">${esc(t.text)}</div>` : ""}
-        <div class="sub">by ${esc(short(t.creator))}</div>
-      </div>
-      <div class="right">
-        <div class="big">${esc(Number(t.supply).toLocaleString())}</div>
-        <div class="tiny">supply</div>
-      </div>
-    </a>`;
-  }).join("");
+function addMsg(role, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + (role === "user" ? "user" : "bot");
+  d.textContent = text;
+  $("chat").append(d);
+  $("chat").scrollTop = $("chat").scrollHeight;
 }
-$("q").oninput = render;
-$("refresh").onclick = () => { loadStatus(); loadTokens(); };
 
-$("walletBtn").onclick = async () => {
+async function getAccount() {
+  const acc = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
+  return acc[0] || null;
+}
+
+async function checkReadiness() {
+  if (!account) { $("readiness").textContent = "Connect your wallet to start."; return false; }
+  const qor = await reader.getBalance(account);
+  let win = null;
+  try { win = await fetchWindow(account); } catch (e) {}
+  const open = win && win.live;
+  const enough = qor >= ethers.parseEther("10.5");
+  const parts = [];
+  parts.push(open ? "Window open" : "Window closed: open one in QoreX before creating a token");
+  parts.push(enough ? "QOR balance ok" : "Needs about 10.5 QOR (get test QOR from the QoreChain dashboard Faucet)");
+  $("readiness").textContent = parts.join(". ") + ".";
+  return open && enough;
+}
+
+async function connect() {
   if (!window.ethereum) return toast("Open this page in a wallet browser");
   try {
-    const p = new ethers.BrowserProvider(window.ethereum);
-    const accts = await p.send("eth_requestAccounts", []);
-    walletAddr = accts[0];
-    $("walletBtn").textContent = short(walletAddr);
-  } catch (e) { toast(e.shortMessage || e.message); }
-};
-
-let imageReady = null;
-$("image").onchange = () => {
-  const f = $("image").files[0];
-  imageReady = null;
-  if (!f) { $("prevBox").innerHTML = "No image"; return; }
-  if (f.size > 1024 * 1024) { setStatus("Image must be under 1 MB"); $("image").value = ""; return; }
-  $("prevBox").innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`;
-  imageReady = fileToBase64(f).then(data => ({ file: f, data })).catch(e => ({ file: f, error: e.message }));
-  imageReady.then(r => { if (r.error) setStatus("Image error: " + r.error); });
-};
-
-async function fileToBase64(file) {
-  try {
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) {
-      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    }
-    return btoa(bin);
-  } catch (e) {
-    return new Promise((resolve, reject) => {
-      const fr = new FileReader();
-      fr.onload = () => resolve(fr.result.split(",")[1]);
-      fr.onerror = () => reject(new Error("browser could not read the file (" + (fr.error ? fr.error.name : "unknown") + "). Choose the image again."));
-      fr.readAsDataURL(file);
-    });
-  }
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    account = await getAccount();
+    $("connectBtn").textContent = account ? short(account) : "Connect";
+    await checkReadiness();
+  } catch (e) { toast("Connection was not approved"); }
 }
-async function uploadImage(file, cachedData) {
+$("connectBtn").onclick = connect;
+
+async function sendMessage() {
+  const text = $("msg").value.trim();
+  if (!text) return;
+  $("msg").value = "";
+  addMsg("user", text);
+  history.push({ role: "user", content: text });
+  $("sendBtn").disabled = true;
+  try {
+    const r = await fetch("/api/agent", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: history }) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "agent error");
+    const reply = j.reply || "";
+    if (reply) { addMsg("bot", reply); history.push({ role: "assistant", content: reply }); }
+    if (j.draft) { draft = j.draft; showReview(); }
+  } catch (e) {
+    addMsg("bot", "The agent could not answer: " + e.message);
+  } finally { $("sendBtn").disabled = false; }
+}
+$("sendBtn").onclick = sendMessage;
+$("msg").addEventListener("keydown", (e) => { if (e.key === "Enter") sendMessage(); });
+
+async function uploadImage(file) {
+  if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) throw new Error("Use a PNG, JPEG, or WebP image");
   if (file.size > 1024 * 1024) throw new Error("Image must be under 1 MB");
-  const r = await fetch("/api/upload", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ contentType: file.type, data: cachedData || await fileToBase64(file) })
-  });
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType: file.type, data: btoa(bin) }) });
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || "image upload failed");
   return j.url;
 }
-async function ensureChain(p) {
-  const net = await p.getNetwork();
-  if (Number(net.chainId) === CHAIN_ID) return;
+$("imgFile").onchange = async () => {
+  const f = $("imgFile").files[0];
+  imageUrl = null;
+  if (!f) { $("imgState").textContent = "No image yet. Optional, up to 1 MB."; return; }
+  $("imgState").textContent = "Uploading image...";
   try {
-    await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]);
-  } catch (e) {
-    const code = e.code ?? e.info?.error?.code;
-    if (code === 4902) {
-      await p.send("wallet_addEthereumChain", [{
-        chainId: CHAIN_HEX,
-        chainName: "QoreChain Diana Testnet",
-        nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 },
-        rpcUrls: [RPC]
-      }]);
-    } else throw e;
-  }
-}
-function checkInputs(r) {
-  const bytes = s => new TextEncoder().encode(s).length;
-  if (bytes(r.name) < 1 || bytes(r.name) > 32) throw new Error("Name must be 1 to 32 bytes");
-  if (bytes(r.symbol) < 1 || bytes(r.symbol) > 10) throw new Error("Ticker must be 1 to 10 characters");
-  if (bytes(r.description) > 280) throw new Error("Description must be at most 280 bytes");
-  if (!/^\d+$/.test(r.supply)) throw new Error("Supply must be a whole number");
-  const s = BigInt(r.supply);
-  if (s < 1n || s > 1000000000000n) throw new Error("Supply must be between 1 and 1000000000000");
-}
-function explorerUrl(h) { return "https://dashboard.qorechain.io/explorer/tx/" + h.replace(/^0x/, "").toUpperCase(); }
-function setStatus(t) {
-  const el = $("status");
-  el.textContent = "";
-  let last = 0;
-  for (const m of String(t).matchAll(/0x[0-9a-fA-F]{64}/g)) {
-    el.append(document.createTextNode(String(t).slice(last, m.index)));
-    const a = document.createElement("a");
-    a.href = explorerUrl(m[0]); a.target = "_blank"; a.rel = "noopener"; a.textContent = m[0];
-    a.style.color = "#0a7f6e"; a.style.fontWeight = "700";
-    el.append(a);
-    last = m.index + m[0].length;
-  }
-  el.append(document.createTextNode(String(t).slice(last)));
-}
-function fmtTime(iso) { return new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }); }
-
-function pollRequest(id) {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(async () => {
-    try {
-      const j = await (await fetch("/api/status?id=" + encodeURIComponent(id))).json();
-      if (j.status === "submitted") {
-        clearInterval(pollTimer);
-        launchDone = true;
-        $("create").disabled = true;
-        $("create").style.opacity = "0.5";
-        setStatus("Launched. Transaction: " + j.txHash);
-        setTimeout(() => { showTab("board"); loadTokens(); }, 2500);
-      } else if (j.status === "expired" || j.status === "error") {
-        clearInterval(pollTimer);
-        launchDone = false;
-        $("create").disabled = false;
-        $("create").style.opacity = "1";
-                setStatus("Launch " + j.status + (j.error ? ": " + j.error : "") + ". Sign again to retry.");
-      } else {
-        setStatus("Queued. Waiting for the window to open" + (j.deadline ? " (valid until " + fmtTime(new Date(j.deadline * 1000).toISOString()) + ")" : "") + ".");
-      }
-    } catch (e) { setStatus("Status check failed: " + e.message + ". Still waiting."); }
-  }, 30000);
-}
-
-let launchDone = false;
-$("create").onclick = async () => {
-  const btn = $("create");
-  btn.disabled = true;
-  try {
-    if (!window.ethereum) throw new Error("Open this page in a wallet browser (for example Brave with its wallet).");
-    let p = new ethers.BrowserProvider(window.ethereum);
-    await p.send("eth_requestAccounts", []);
-    setStatus("Switching wallet to Diana...");
-    await ensureChain(p);
-    p = new ethers.BrowserProvider(window.ethereum);
-    const signer = await p.getSigner();
-    walletAddr = await signer.getAddress();
-    $("walletBtn").textContent = short(walletAddr);
-
-    const s = await loadStatus();
-    const now = Math.floor(Date.now() / 1000);
-    const opensAtSec = s && s.opensAt ? Math.floor(Date.parse(s.opensAt) / 1000) : 0;
-    const deadline = Math.max(now + 3600, opensAtSec > now ? opensAtSec + 3600 : 0);
-
-    const symbol = $("symbol").value.trim().replace(/^\$+/, "");
-    let description = $("desc").value.trim();
-    const file = $("image").files[0];
-    if (file) {
-      setStatus("Uploading image...");
-      const cached = imageReady ? await imageReady : null;
-      if (cached && cached.error) throw new Error(cached.error);
-      const cachedData = cached && cached.file === file ? cached.data : null;
-      description = (description ? description + " " : "") + "img:" + await uploadImage(file, cachedData);
-    }
-    if (new TextEncoder().encode(description).length > 280)
-      throw new Error("Description plus image link must be at most 280 bytes. Shorten the description.");
-
-    const request = {
-      creator: walletAddr,
-      name: $("name").value.trim(),
-      symbol,
-      supply: $("supply").value.trim(),
-      description,
-      nonce: String(Date.now()),
-      deadline: String(deadline)
-    };
-    checkInputs(request);
-
-    setStatus("Sign the request in your wallet. No gas is charged for signing.");
-    const signature = await signer.signTypedData(domain, types, request);
-
-    setStatus("Sending to relayer...");
-    const r = await fetch("/api/relay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ request, signature })
-    });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || "relayer error " + r.status);
-
-    if (j.status === "queued") {
-      launchDone = true;
-      btn.disabled = true;
-      btn.style.opacity = "0.5";
-      setStatus("Queued. Waiting for the window to open" + (j.opensAt ? " at " + fmtTime(j.opensAt) : "") + ".");
-      pollRequest(j.id);
-    } else {
-      launchDone = true;
-      btn.disabled = true;
-      btn.style.opacity = "0.5";
-      setStatus("Launched. Transaction: " + j.txHash);
-      setTimeout(() => { showTab("board"); loadTokens(); }, 2500);
-    }
-  } catch (e) {
-    setStatus("Error: " + (e.shortMessage || e.message));
-  } finally {
-    if (!launchDone) btn.disabled = false;
-  }
+    imageUrl = await uploadImage(f);
+    $("imgState").textContent = "Image attached.";
+    if (draft) showReview();
+  } catch (e) { $("imgState").textContent = "Image error: " + e.message; }
 };
 
-if (location.hash === "#launch" || location.hash === "#more") showTab(location.hash.slice(1));
-loadStatus();
-loadTokens();
-setInterval(loadStatus, 60000);
+function fullDescription() {
+  return draft.description + (imageUrl ? " img:" + imageUrl : "");
+}
+
+function showReview() {
+  $("reviewCard").hidden = false;
+  const list = $("reviewList");
+  list.textContent = "";
+  const rows = [["Name", draft.name], ["Ticker", "$" + draft.symbol], ["Supply", Number(draft.supply).toLocaleString() + " tokens"], ["Description", draft.description]];
+  for (const [k, v] of rows) {
+    const dt = document.createElement("dt"); dt.textContent = k;
+    const dd = document.createElement("dd"); dd.textContent = v;
+    list.append(dt, dd);
+  }
+  if (imageUrl) {
+    const dt = document.createElement("dt"); dt.textContent = "Image";
+    const img = document.createElement("img"); img.className = "thumb"; img.src = imageUrl; img.alt = draft.symbol;
+    list.append(dt, img);
+  }
+  const bytes = enc.encode(fullDescription()).length;
+  if (bytes > 280) { $("signBtn").disabled = true; setStatus("Description with image link is " + bytes + " bytes; the limit is 280. Shorten the description."); }
+  else { $("signBtn").disabled = false; setStatus(""); }
+}
+$("editBtn").onclick = () => { draft = null; $("reviewCard").hidden = true; addMsg("bot", "Tell me what to change."); };
+
+async function getSigner() {
+  if (!window.ethereum) throw new Error("Open this page in a wallet browser.");
+  let p = new ethers.BrowserProvider(window.ethereum);
+  await p.send("eth_requestAccounts", []);
+  const net = await p.getNetwork();
+  if (Number(net.chainId) !== CHAIN_ID) {
+    try { await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]); }
+    catch (e) {
+      const code = e.code ?? (e.info && e.info.error && e.info.error.code);
+      if (code === 4902) await p.send("wallet_addEthereumChain", [{ chainId: CHAIN_HEX, chainName: "QoreChain Diana Testnet", nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: [RPC] }]);
+      else throw e;
+    }
+    p = new ethers.BrowserProvider(window.ethereum);
+  }
+  return p.getSigner();
+}
+
+function addStep(label) {
+  const d = document.createElement("div");
+  d.className = "step";
+  d.textContent = label;
+  $("steps").append(d);
+  return d;
+}
+
+async function signAndCreate() {
+  if (!draft) return;
+  const btn = $("signBtn"); btn.disabled = true;
+  $("stepsCard").hidden = false; $("steps").textContent = ""; $("result").textContent = "";
+  try {
+    if (!(await checkReadiness())) throw new Error("Not ready: check the window and your QOR balance above.");
+    const signer = await getSigner();
+    const me = await signer.getAddress();
+    const wqor = new ethers.Contract(WQOR, WQOR_ABI, signer);
+    const fac = new ethers.Contract(FACTORY, FACTORY_ABI, signer);
+
+    const bal = await wqor.balanceOf(me);
+    if (bal < SEED) {
+      const s = addStep("Wrap " + ethers.formatEther(SEED - bal) + " QOR into WQOR: waiting for your confirmation");
+      const tx = await wqor.deposit({ value: SEED - bal });
+      s.textContent = "Wrap: submitted " + tx.hash; s.append(" ");
+      s.append(hashLink(tx.hash));
+      await tx.wait();
+      s.textContent = "Wrap: confirmed. ";
+      s.append(hashLink(tx.hash));
+    }
+
+    const allow = await wqor.allowance(me, FACTORY);
+    if (allow < SEED) {
+      const s = addStep("Approve the factory for 10 WQOR: waiting for your confirmation");
+      const tx = await wqor.approve(FACTORY, SEED);
+      s.textContent = "Approve: submitted. "; s.append(hashLink(tx.hash));
+      await tx.wait();
+      s.textContent = "Approve: confirmed. "; s.append(hashLink(tx.hash));
+    }
+
+    const s3 = addStep("Create the token: waiting for your confirmation");
+    const tx = await fac.createToken(draft.name, draft.symbol, draft.supply, fullDescription());
+    s3.textContent = "Create: submitted. "; s3.append(hashLink(tx.hash));
+    const rc = await tx.wait();
+    let token = null, pool = null;
+    for (const log of rc.logs) {
+      try {
+        const ev = fac.interface.parseLog(log);
+        if (ev && ev.name === "TokenCreated") { token = ev.args.token; pool = ev.args.pool; }
+      } catch (e) {}
+    }
+    s3.textContent = "Create: confirmed. "; s3.append(hashLink(tx.hash));
+    $("result").textContent = token
+      ? "Token created: " + token + " (pool " + pool + "). It appears on the Board once the page reloads."
+      : "Transaction confirmed, but the token address was not found in the logs. Check the hash above.";
+    addMsg("bot", "Your token " + draft.symbol + " is created.");
+    draft = null; imageUrl = null; $("reviewCard").hidden = true;
+  } catch (e) {
+    addStep("Stopped: " + (e.shortMessage || e.message)).classList.add("bad");
+    $("signBtn").disabled = false;
+    return;
+  }
+  btn.disabled = false;
+}
+$("signBtn").onclick = signAndCreate;
+
+window.ethereum && window.ethereum.on && window.ethereum.on("accountsChanged", async () => { account = await getAccount(); $("connectBtn").textContent = account ? short(account) : "Connect"; await checkReadiness(); });
+(async () => {
+  account = await getAccount();
+  if (account) $("connectBtn").textContent = short(account);
+  await checkReadiness();
+  addMsg("bot", "Hi. Tell me your coin's name, ticker, total supply, and a short description. You can also attach an image.");
+})();
 </script>
 </body>
 </html>
