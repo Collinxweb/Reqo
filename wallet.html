@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.16.1 wallet -->
+<!-- version: v2.17.0 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -124,7 +124,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="lbl">AMOUNT</div>
     <input id="amt" class="field" inputmode="decimal" placeholder="0.0">
     <button class="go" id="send">Send</button>
-    <div class="note">Direct sends from your wallet need a registered ML-DSA-87 key and an open authorisation window on your account. Until the key is registered, use Swap, which is relayed. Native QOR transfers are not listed in history yet.</div>
+    <div class="note">Direct sends need an open authorisation window on your account. Reqo checks it before sending. Swap is relayed and does not need a window. Native QOR transfers are not listed in history yet.</div>
   </div>
 
   <div class="card" id="recvPanel" hidden>
@@ -161,7 +161,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 
     <div class="ob-step"><div class="ob-num">4</div><div class="ob-body">
       <div class="ob-head">Come back here</div>
-      <div class="ob-text">The Post-quantum key card shows your registration status once the chain confirms it.</div>
+      <div class="ob-text">The Your quantum-safe account card shows your address, registration status, and window status.</div>
     </div></div>
 
     <div class="ob-divider">Or start now without registering</div>
@@ -172,37 +172,21 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     </div></div>
 
     <button class="go" id="onbClose">Got it</button>
-    <div class="ob-note">A key created on this page is kept as an encrypted backup on this device. It is not the key QoreChain registers. Registration uses the key QoreX creates.</div>
+    <div class="ob-note">Your registered key lives in QoreX. Reqo never asks for your QoreX unlock.</div>
   </dialog>
 
-  <div class="card" id="pqcCard">
-    <h3>Post-quantum key (ML-DSA-87)</h3>
-    <div class="note" style="margin-top:0">Generated in your browser. The private key never leaves this device. It is stored encrypted with your passphrase. If you lose the passphrase, the key cannot be recovered.</div>
-    <div id="pqcState" class="tsub" style="margin:10px 0">Connect your wallet to manage a key.</div>
-    <div id="pqcReg" class="tsub" style="margin:0 0 10px">Chain registration status: not checked.</div>
-    <div id="pqcCreate" hidden>
-      <div class="lbl">PASSPHRASE (12+ characters)</div>
-      <input id="pqcPass1" class="field" type="password" autocomplete="new-password">
-      <div class="lbl">CONFIRM PASSPHRASE</div>
-      <input id="pqcPass2" class="field" type="password" autocomplete="new-password">
-      <button class="go" id="pqcMake">Create key</button>
-    </div>
-    <div id="pqcUse" hidden>
-      <div class="lbl">PASSPHRASE</div>
-      <input id="pqcUnlock" class="field" type="password" autocomplete="current-password">
-      <button class="ghost" id="pqcTest">Unlock and run signature test</button>
-      <button class="ghost" id="pqcBackup">Download encrypted backup</button>
-      <button class="ghost" id="pqcDelete">Delete key from this device</button>
-    </div>
-    <div id="pqcImportBox" hidden>
-      <div class="lbl">RESTORE FROM BACKUP</div>
-      <input id="pqcFile" class="field" type="file" accept="application/json">
-      <button class="ghost" id="pqcImport">Import backup</button>
-    </div>
-    <button class="go" id="pqcConnect" hidden>Connect wallet</button>
-    <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
-    <div class="note">Registration paths: <a href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">QoreX</a>, the official QoreChain wallet (Firefox add-on, not installable in Brave), for QoreX-derived accounts. Developers can register with the native CLI or SDK <code>pqc register-key</code>. Registration is not done from this page yet.</div>
-    <button class="ghost" id="howBtn">Set up my quantum-safe account</button>
+  <div class="card" id="acctCard">
+    <h3>Your quantum-safe account</h3>
+    <div class="note" style="margin-top:0">Your ML-DSA-87 key lives in QoreX, which protects it with your QoreX unlock. Reqo never asks for it. Link the same account you use in QoreX by connecting this wallet.</div>
+    <div class="lbl">NATIVE ADDRESS (qor1)</div>
+    <div class="addr" id="acctQor">Connect your wallet</div>
+    <div class="lbl">REGISTRATION</div>
+    <div class="tsub" id="acctReg">-</div>
+    <div class="lbl">AUTHORISATION WINDOW</div>
+    <div class="tsub" id="acctWin">-</div>
+    <button class="ghost" id="acctRefresh">Refresh</button>
+    <button class="ghost" id="acctQorex">Open QoreX setup</button>
+    <div class="note">Direct sends need an open window on this account. Open or close it in QoreX; Reqo cannot do it for you. Swap and launch are relayed and do not need a window.</div>
   </div>
 
   <div class="card">
@@ -422,6 +406,9 @@ async function send() {
   const btn = $("send"); btn.disabled = true;
   try {
     if (!me) throw new Error("Connect your wallet first");
+    const win = await fetchWindow(me).catch(() => null);
+    if (!win) throw new Error("Could not check your window. Try again.");
+    if (!win.live) throw new Error("No open window on your account. Open one in QoreX, then send again.");
     const a = assets[Number($("asset").value)];
     const to = $("to").value.trim();
     if (!ethers.isAddress(to)) throw new Error("Enter a valid 0x recipient address");
@@ -541,7 +528,7 @@ async function loadHistory() {
 }
 
 $("walletBtn").onclick = async () => {
-  try { await getSigner(); await loadAssets(); await loadHistory(); if (window.pqcRender) await window.pqcRender(); }
+  try { await getSigner(); await loadAssets(); await loadHistory(); await refreshAccount(); }
   catch (e) { setStatus("Error: " + rpcError(e)); }
 };
 
@@ -555,10 +542,75 @@ $("btnSend").onclick = () => openPanel("send");
 $("btnRecv").onclick = () => openPanel("recv");
 $("copyWallet").onclick = () => $("copyAddr").click();
 
+const API = "https://api-testnet.qore.host";
+const BECH_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+function bech32Polymod(values) {
+  const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let chk = 1;
+  for (const v of values) {
+    const b = chk >>> 25;
+    chk = ((chk & 0x1ffffff) << 5) ^ v;
+    for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= G[i];
+  }
+  return chk;
+}
+function bech32Encode(hrp, bytes) {
+  const data = [];
+  let acc = 0, bits = 0;
+  for (const v of bytes) {
+    acc = ((acc << 8) | v) & 0xffff;
+    bits += 8;
+    while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); }
+  }
+  if (bits > 0) data.push((acc << (5 - bits)) & 31);
+  const hrpExp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
+  const pm = bech32Polymod(hrpExp.concat(data, [0, 0, 0, 0, 0, 0])) ^ 1;
+  const checksum = [0, 1, 2, 3, 4, 5].map((i) => (pm >> (5 * (5 - i))) & 31);
+  return hrp + "1" + data.concat(checksum).map((d) => BECH_CHARSET[d]).join("");
+}
+// Same account, two address formats: the 20-byte account is written as qor1... for the chain.
+function qorAddress(evmAddr) {
+  const bytes = (evmAddr.slice(2).match(/../g) || []).map((x) => parseInt(x, 16));
+  return bech32Encode("qor", bytes);
+}
+async function fetchWindow(evmAddr) {
+  const r = await fetch(API + "/qorechain/pqc/v1/evm_window/" + qorAddress(evmAddr));
+  if (!r.ok) throw new Error("window status HTTP " + r.status);
+  return r.json();
+}
+async function refreshAccount() {
+  const acc = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
+  if (!acc.length) {
+    $("acctQor").textContent = "Connect your wallet";
+    $("acctReg").textContent = "-";
+    $("acctWin").textContent = "-";
+    return;
+  }
+  const me = acc[0];
+  $("acctQor").textContent = qorAddress(me);
+  $("acctReg").textContent = "Checking...";
+  try {
+    const r = await fetch(API + "/qorechain/pqc/v1/account/" + qorAddress(me));
+    if (r.ok) {
+      const j = await r.json();
+      $("acctReg").textContent = "Chain response (format being confirmed): " + JSON.stringify(j).slice(0, 180);
+    } else $("acctReg").textContent = "Could not read (HTTP " + r.status + ").";
+  } catch (e) { $("acctReg").textContent = "Unavailable right now."; }
+  try {
+    const w = await fetchWindow(me);
+    $("acctWin").textContent = w.live
+      ? "Open: " + w.remaining_blocks + " blocks and " + w.remaining_txs + " transactions left."
+      : "Closed. Open a window in QoreX to send directly.";
+  } catch (e) { $("acctWin").textContent = "Could not check the window right now."; }
+}
+$("acctRefresh").onclick = refreshAccount;
+$("acctQorex").onclick = () => openOnboard();
+
 async function start() {
   await loadAssets();
   await loadHistory();
-  setInterval(loadAssets, 30000);
+  await refreshAccount();
+  setInterval(() => { loadAssets(); refreshAccount(); }, 30000);
 }
 start();
 </script>
@@ -579,192 +631,6 @@ document.addEventListener("pointerdown", firstTouch, true);
 document.getElementById("howBtn").onclick = openOnboard;
 document.getElementById("onbClose").onclick = closeOnboard;
 document.getElementById("obRelayer").onclick = closeOnboard;
-</script>
-<script type="module">
-const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js/+esm";
-let ml_dsa87 = null;
-
-const $ = (id) => document.getElementById(id);
-const enc = new TextEncoder();
-const b64 = (u8) => btoa(String.fromCharCode(...u8));
-const unb64 = (str) => Uint8Array.from(atob(str), (c) => c.charCodeAt(0));
-const hex = (u8) => Array.from(u8, (b) => b.toString(16).padStart(2, "0")).join("");
-const keyId = (addr) => "reqo-pqc-" + addr.toLowerCase();
-const PBKDF2_ITER = 600000;
-
-function say(text) { $("pqcMsg").textContent = text; }
-async function loadLib() {
-  try {
-    const mod = await import(LIB_URL);
-    ml_dsa87 = mod.ml_dsa87;
-    if (!ml_dsa87 || typeof ml_dsa87.keygen !== "function") throw new Error("ml_dsa87 export not found");
-  } catch (e) {
-    say("Key library did not load (" + e.message + "). Post-quantum key features are unavailable on this page load.");
-  }
-}
-function needLib() {
-  if (!ml_dsa87) { say("Key library is not loaded. Reload the page; if this repeats, tell the team the library failed to load."); return false; }
-  return true;
-}
-async function account() {
-  const acc = window.ethereum ? await window.ethereum.request({ method: "eth_accounts" }) : [];
-  return acc[0] || null;
-}
-function load(addr) {
-  try { return JSON.parse(localStorage.getItem(keyId(addr))); } catch (e) { return null; }
-}
-async function deriveKey(pass, salt) {
-  const base = await crypto.subtle.importKey("raw", enc.encode(pass), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: PBKDF2_ITER, hash: "SHA-256" },
-    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
-}
-async function fingerprint(pk) {
-  const d = new Uint8Array(await crypto.subtle.digest("SHA-256", pk));
-  return hex(d.slice(0, 8)).match(/../g).join(":");
-}
-
-async function loadRegistration(addr) {
-  const el = $("pqcReg");
-  el.textContent = "Chain registration status: checking...";
-  try {
-    const r = await fetch("https://api-testnet.qore.host/qorechain/pqc/v1/account/" + addr);
-    if (!r.ok) { el.textContent = "Chain registration status: could not read (HTTP " + r.status + ")."; return; }
-    const j = await r.json();
-    el.textContent = "Chain registration status (raw): " + JSON.stringify(j).slice(0, 240);
-  } catch (e) {
-    el.textContent = "Chain registration status: unavailable right now.";
-  }
-}
-
-async function render() {
-  const addr = await account();
-  const rec = addr ? load(addr) : null;
-  $("pqcCreate").hidden = true;
-  $("pqcUse").hidden = true;
-  $("pqcImportBox").hidden = true;
-  $("pqcConnect").hidden = !!addr;
-  if (!addr) { $("pqcState").textContent = "Connect your wallet to manage a key."; return; }
-  if (!rec) {
-    $("pqcState").textContent = "No key on this device for this wallet.";
-    $("pqcCreate").hidden = false;
-    $("pqcImportBox").hidden = false;
-    return;
-  }
-  $("pqcState").textContent = "Key stored on this device. Fingerprint " + rec.fp + ". Created " + new Date(rec.createdAt).toLocaleDateString() + ".";
-  $("pqcUse").hidden = false;
-  loadRegistration(addr);
-}
-
-async function createKey() {
-  if (!needLib()) return;
-  const addr = await account();
-  if (!addr) return say("Connect your wallet first.");
-  if (load(addr)) return say("A key already exists for this wallet on this device.");
-  const p1 = $("pqcPass1").value, p2 = $("pqcPass2").value;
-  if (p1.length < 12) return say("Passphrase must be at least 12 characters.");
-  if (p1 !== p2) return say("Passphrases do not match.");
-
-  const { publicKey, secretKey } = ml_dsa87.keygen();
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const k = await deriveKey(p1, salt);
-  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, k, secretKey));
-  const rec = {
-    v: 1, alg: "ML-DSA-87", address: addr,
-    pk: b64(publicKey), fp: await fingerprint(publicKey),
-    salt: b64(salt), iv: b64(iv), sk: b64(ct),
-    createdAt: new Date().toISOString(),
-  };
-  secretKey.fill(0);
-  localStorage.setItem(keyId(addr), JSON.stringify(rec));
-  $("pqcPass1").value = ""; $("pqcPass2").value = "";
-  say("Key created. Back it up now.");
-  await render();
-}
-
-async function unlockSecret(rec, pass) {
-  const k = await deriveKey(pass, unb64(rec.salt));
-  return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(rec.iv) }, k, unb64(rec.sk)));
-}
-
-async function testKey() {
-  if (!needLib()) return;
-  const addr = await account();
-  const rec = addr && load(addr);
-  if (!rec) return say("No key on this device.");
-  const pass = $("pqcUnlock").value;
-  if (!pass) return say("Enter your passphrase.");
-  let sk;
-  try { sk = await unlockSecret(rec, pass); }
-  catch (e) { return say("Wrong passphrase, or the stored key is damaged."); }
-  const pk = unb64(rec.pk);
-  const message = enc.encode("reqo-pqc-test:" + addr.toLowerCase() + ":" + Date.now());
-  const sig = ml_dsa87.sign(message, sk);
-  const ok = ml_dsa87.verify(sig, message, pk);
-  sk.fill(0);
-  say(ok
-    ? "Signature test passed. Public key " + pk.length + " bytes, signature " + sig.length + " bytes."
-    : "Signature test failed. Do not use this key.");
-}
-
-function backup() {
-  const addr = null;
-  (async () => {
-    const acc = await account();
-    const rec = acc && load(acc);
-    if (!rec) return say("No key on this device.");
-    const blob = new Blob([JSON.stringify(rec, null, 2)], { type: "application/json" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "reqo-pqc-backup-" + acc.toLowerCase().slice(0, 10) + ".json";
-    a.click();
-    URL.revokeObjectURL(a.href);
-    say("Backup downloaded. It is encrypted; keep it and your passphrase safe.");
-  })();
-}
-
-async function importBackup() {
-  const addr = await account();
-  if (!addr) return say("Connect your wallet first.");
-  const file = $("pqcFile").files[0];
-  if (!file) return say("Choose a backup file.");
-  let rec;
-  try { rec = JSON.parse(await file.text()); } catch (e) { return say("That file is not a valid backup."); }
-  if (rec.alg !== "ML-DSA-87" || !rec.sk || !rec.pk || !rec.salt || !rec.iv) return say("That file is not a Reqo key backup.");
-  if (String(rec.address).toLowerCase() !== addr.toLowerCase()) return say("This backup belongs to a different wallet.");
-  if (load(addr)) return say("A key already exists for this wallet. Delete it first to restore.");
-  localStorage.setItem(keyId(addr), JSON.stringify(rec));
-  say("Backup restored. Enter your passphrase to test it.");
-  await render();
-}
-
-function deleteKey() {
-  (async () => {
-    const addr = await account();
-    if (!addr) return;
-    if (!confirm("Delete this key from this device? Without a backup it cannot be recovered.")) return;
-    localStorage.removeItem(keyId(addr));
-    say("Key deleted from this device.");
-    await render();
-  })();
-}
-
-$("pqcMake").onclick = createKey;
-loadLib();
-$("pqcTest").onclick = testKey;
-$("pqcBackup").onclick = backup;
-$("pqcImport").onclick = importBackup;
-$("pqcDelete").onclick = deleteKey;
-$("pqcConnect").onclick = async () => {
-  if (!window.ethereum) return say("Open this page in a wallet browser.");
-  try { await window.ethereum.request({ method: "eth_requestAccounts" }); }
-  catch (e) { return say("Connection was not approved."); }
-  await render();
-};
-if (window.ethereum && window.ethereum.on) window.ethereum.on("accountsChanged", () => render());
-window.pqcRender = render;
-render();
 </script>
 </body>
 </html>
