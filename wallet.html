@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.2 wallet -->
+<!-- version: v2.15.3 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -495,7 +495,7 @@ async function start() {
 start();
 </script>
 <script type="module">
-const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js";
+const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js/+esm";
 let ml_dsa87 = null;
 
 const $ = (id) => document.getElementById(id);
