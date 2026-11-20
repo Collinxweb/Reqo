@@ -226,6 +226,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v2.15.4 | 2026-11-20 | (pending) | Wallet: 'How wallets work here' explainer (connect wallet, relayer, post-quantum key) and a link to the official QoreX wallet (Firefox add-on listing by QoreChain Team, addons.mozilla.org/firefox/addon/qorex/). QoreX is a Firefox add-on, so it is not installable in Brave. |
 | v2.15.3 | 2026-11-20 | (pending) | Key library loads from jsDelivr's bundled build (`ml-dsa.js/+esm`). The unbundled file imports `@noble/curves/utils.js` by bare name, which browsers cannot resolve. |
 | v2.15.2 | 2026-11-20 | (pending) | Post-quantum card: the key library loads separately, so a failed library import no longer stops the card's buttons. A library load failure or a missing export is shown on the card. Likely cause of 'nothing changes': the static import of `@noble/post-quantum@0.5.2` failed and the whole module stopped. |
 | v2.15.1 | 2026-11-20 | (pending) | Post-quantum card: a Connect wallet button inside the card, and the card refreshes after connecting, switching accounts, or the header Connect. Previously the card stayed on 'Connect your wallet' because nothing triggered a refresh after connecting. |

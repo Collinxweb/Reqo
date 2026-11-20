@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.3 wallet -->
+<!-- version: v2.15.4 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -63,6 +63,12 @@ nav.bottom .on{color:var(--accent)}
 nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;background:var(--accent);color:var(--accentInk);justify-content:center;margin-top:-30px;box-shadow:0 0 26px var(--glow);font-size:24px}
 .avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .mini{border:1px solid var(--accent);background:transparent;color:var(--accent);border-radius:999px;padding:6px 12px;font-weight:800;font-size:12px;cursor:pointer;white-space:nowrap}
+dialog{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:22px;max-width:420px;width:calc(100% - 32px);padding:18px}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+.xrow{padding:10px 0;border-bottom:1px solid var(--line)}
+.xhead{font-weight:800;font-size:15px}
+.xbody{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}
+.xnote{color:var(--muted);font-size:12px;margin:12px 0 4px}
 </style>
 </head>
 <body>
@@ -109,6 +115,18 @@ nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;backgr
     <div class="note">Send QOR, WQOR, or any Reqo token to this address on Diana testnet (chain 9800).</div>
   </div>
 
+  <dialog id="explain">
+    <div style="font-weight:900;font-size:18px;margin-bottom:10px">How wallets work here</div>
+    <div class="xrow"><div class="xhead">1. Connect wallet</div>
+      <div class="xbody">Lets this site see your address and ask you to sign. It does not move any money and costs no gas.</div></div>
+    <div class="xrow"><div class="xhead">2. Relayer</div>
+      <div class="xbody">You sign a request, and our relayer sends the transaction for you, so you pay no gas. The relayer can only submit what you signed. It runs only while its window is open, and it has spending limits.</div></div>
+    <div class="xrow"><div class="xhead">3. Post-quantum key (ML-DSA-87)</div>
+      <div class="xbody">A separate key, created on this device and encrypted with your passphrase. It is not registered on QoreChain yet, so it does not change how launches or trades work today. Registration will go through QoreX once confirmed.</div></div>
+    <div class="xnote">Losing your passphrase means losing the post-quantum key. Back it up from the card below.</div>
+    <button class="go" id="explainClose">Got it</button>
+  </dialog>
+
   <div class="card" id="pqcCard">
     <h3>Post-quantum key (ML-DSA-87)</h3>
     <div class="note" style="margin-top:0">Generated in your browser. The private key never leaves this device. It is stored encrypted with your passphrase. If you lose the passphrase, the key cannot be recovered.</div>
@@ -134,7 +152,8 @@ nav.bottom .center{flex:0 0 auto;width:62px;height:62px;border-radius:50%;backgr
     </div>
     <button class="go" id="pqcConnect" hidden>Connect wallet</button>
     <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
-    <div class="note">Registration on QoreChain is not done here yet. It will go through QoreX, which signs the registration with your account key.</div>
+    <div class="note">Registration on QoreChain is not done here yet. It will go through <a href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">QoreX</a>, the official QoreChain wallet, once QoreChain confirms the registration flow. QoreX is a Firefox add-on, so it installs in Firefox, not Brave.</div>
+    <button class="ghost" id="howBtn">How wallets work here</button>
   </div>
 
   <div class="card">
@@ -493,6 +512,10 @@ async function start() {
   setInterval(loadAssets, 30000);
 }
 start();
+</script>
+<script>
+document.getElementById("howBtn").onclick = () => document.getElementById("explain").showModal();
+document.getElementById("explainClose").onclick = () => document.getElementById("explain").close();
 </script>
 <script type="module">
 const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js/+esm";
