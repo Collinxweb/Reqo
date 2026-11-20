@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v2.15.5 wallet -->
+<!-- version: v2.16.1 wallet -->
 <title>Reqo Wallet</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -69,6 +69,25 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 .xhead{font-weight:800;font-size:15px}
 .xbody{color:var(--muted);font-size:13px;margin-top:4px;line-height:1.45}
 .xnote{color:var(--muted);font-size:12px;margin:12px 0 4px}
+#onboard{max-height:88vh;overflow:auto;padding:20px}
+.ob-title{font-weight:900;font-size:19px;margin-bottom:6px}
+.ob-sub{color:var(--muted);font-size:13px;line-height:1.45;margin-bottom:12px}
+.ob-step{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.ob-num{width:30px;height:30px;flex:0 0 30px;border-radius:50%;background:var(--accent);color:var(--accentInk);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:14px}
+.ob-num.alt{background:var(--card2);color:var(--ink);border:1px solid var(--line)}
+.ob-body{flex:1;min-width:0}
+.ob-head{font-weight:800;font-size:15px}
+.ob-text{color:var(--muted);font-size:13px;line-height:1.45;margin-top:3px}
+.ob-soon{color:var(--muted);font-size:12px;margin-top:6px}
+.ob-divider{color:var(--muted);font-size:12px;font-weight:800;letter-spacing:.3px;margin:14px 0 2px;text-transform:uppercase}
+.ob-go{margin-top:8px;padding:11px 16px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-weight:900;font-size:14px;cursor:pointer}
+.ob-note{color:var(--muted);font-size:12px;line-height:1.45;margin:14px 0 10px}
+#onboard .go{margin-top:6px}
+.ob-stores{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.ob-store{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:14px;border:1px solid var(--line);background:var(--card2);color:var(--ink);text-decoration:none;font-weight:800;font-size:15px}
+.ob-store small{display:block;font-weight:600;font-size:11px;color:var(--muted);letter-spacing:.2px}
+.ob-logo{width:26px;height:26px;flex:0 0 26px;color:var(--ink)}
+.ob-store span{line-height:1.15}
 </style>
 </head>
 <body>
@@ -115,18 +134,45 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <div class="note">Send QOR, WQOR, or any Reqo token to this address on Diana testnet (chain 9800).</div>
   </div>
 
-  <dialog id="explain">
-    <div style="font-weight:900;font-size:18px;margin-bottom:10px">How wallets work here</div>
-    <div class="xrow"><div class="xhead">1. Connect wallet</div>
-      <div class="xbody">Lets this site see your address and ask you to sign. It does not move any money and costs no gas.</div></div>
-    <div class="xrow"><div class="xhead">2. Relayer</div>
-      <div class="xbody">You sign a request, and our relayer sends the transaction for you, so you pay no gas. The relayer can only submit what you signed. It runs only while its window is open, and it has spending limits.</div></div>
-    <div class="xrow"><div class="xhead">3. Post-quantum key (ML-DSA-87)</div>
-      <div class="xbody">A key created on this device and encrypted with your passphrase. The chain only uses a key once it is registered to your account. Direct sends from your wallet need a registered key and an open window. Relayed trades and launches do not need your key, but the relayer's account must meet the same rule.</div></div>
-    <div class="xrow"><div class="xhead">How to register</div>
-      <div class="xbody">QoreX: if your account is QoreX-derived, QoreX registers the key on its first transaction. Developers: use the native CLI or SDK <code>pqc register-key</code> with proof of possession.</div></div>
-    <div class="xnote">Losing your passphrase means losing the post-quantum key. Back it up from the card below.</div>
-    <button class="go" id="explainClose">Got it</button>
+  <dialog id="onboard">
+    <div class="ob-title">Get your quantum-safe account</div>
+    <div class="ob-sub">Your ML-DSA-87 key is what protects your QOR on QoreChain. Set it up once through QoreX.</div>
+
+    <div class="ob-step"><div class="ob-num">1</div><div class="ob-body">
+      <div class="ob-head">Install QoreX</div>
+      <div class="ob-text">QoreX is the official QoreChain wallet. Choose the store for your device.</div>
+      <div class="ob-stores">
+        <a class="ob-store" href="https://apps.apple.com" target="_blank" rel="noopener"><svg class="ob-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M16.37 12.6c.02 2.45 2.15 3.27 2.17 3.28-.02.06-.34 1.17-1.12 2.32-.68 1.0-1.38 2-2.49 2.02-1.09.02-1.44-.65-2.69-.65-1.25 0-1.64.63-2.67.67-1.07.04-1.89-1.08-2.58-2.08-1.4-2.03-2.47-5.73-1.03-8.23.72-1.24 2-2.03 3.38-2.05 1.05-.02 2.05.71 2.69.71.64 0 1.84-.87 3.1-.74.53.02 2.01.21 2.96 1.6-.08.05-1.77 1.03-1.75 3.08zM14.5 4.63c.57-.69.95-1.65.85-2.61-.82.03-1.81.55-2.4 1.24-.53.61-.99 1.59-.87 2.53.91.07 1.85-.46 2.42-1.16z"/></svg><span><small>Download on the</small>App Store</span></a>
+        <a class="ob-store" href="https://play.google.com/store/apps/details?id=network.qore.qorex" target="_blank" rel="noopener"><svg class="ob-logo" viewBox="0 0 24 24" aria-hidden="true"><path fill="#00D27A" d="M3.6 1.8 13.3 12 3.6 22.2c-.3-.2-.5-.6-.5-1.1V2.9c0-.5.2-.9.5-1.1z"/><path fill="#2196F3" d="M3.6 1.8c.3-.2.7-.2 1.1 0L16.6 8.9 13.3 12z"/><path fill="#FFC107" d="M16.6 8.9l3.2 1.8c.8.4.8 1.2 0 1.7L16.6 14.2 13.3 12z"/><path fill="#F44336" d="M3.6 22.2l9.7-10.2 3.3 3.1-12.4 7.1c-.4.2-.8.2-1.1 0z"/></svg><span><small>GET IT ON</small>Google Play</span></a>
+        <a class="ob-store" href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener"><svg class="ob-logo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path fill="currentColor" d="M7 9c1-3 4-4 6-3-2 .6-2.5 2-1.5 3.5 1 1.5 3 1 3.5 0-.3 2.5-2.5 4.5-5 4.5-2.5 0-4.5-2-4.5-4.5 0-1.1.4-2.2 1.5-3.5z"/></svg><span><small>Desktop</small>Firefox add-on</span></a>
+      </div>
+      <div class="ob-soon">Chrome desktop link: being confirmed by QoreChain.</div>
+    </div></div>
+
+    <div class="ob-step"><div class="ob-num">2</div><div class="ob-body">
+      <div class="ob-head">Create or import your account in QoreX</div>
+      <div class="ob-text">Write down your recovery phrase and store it offline. Anyone with it controls your QOR.</div>
+    </div></div>
+
+    <div class="ob-step"><div class="ob-num">3</div><div class="ob-body">
+      <div class="ob-head">Send your first QoreChain transaction</div>
+      <div class="ob-text">QoreX registers your ML-DSA-87 key on the first transaction it signs. Your account is then ready for direct transactions while a window is open.</div>
+    </div></div>
+
+    <div class="ob-step"><div class="ob-num">4</div><div class="ob-body">
+      <div class="ob-head">Come back here</div>
+      <div class="ob-text">The Post-quantum key card shows your registration status once the chain confirms it.</div>
+    </div></div>
+
+    <div class="ob-divider">Or start now without registering</div>
+    <div class="ob-step"><div class="ob-num alt">R</div><div class="ob-body">
+      <div class="ob-head">Use Reqo through the relayer</div>
+      <div class="ob-text">Swap and launch here. You sign the request, and the relayer submits it, so you pay no gas and do not need a registered key. Limits apply, and the relayer runs only while its window is open.</div>
+      <button class="ob-go" id="obRelayer">Continue with the relayer</button>
+    </div></div>
+
+    <button class="go" id="onbClose">Got it</button>
+    <div class="ob-note">A key created on this page is kept as an encrypted backup on this device. It is not the key QoreChain registers. Registration uses the key QoreX creates.</div>
   </dialog>
 
   <div class="card" id="pqcCard">
@@ -156,7 +202,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
     <button class="go" id="pqcConnect" hidden>Connect wallet</button>
     <div id="pqcMsg" class="status" style="margin:8px 0 0"></div>
     <div class="note">Registration paths: <a href="https://addons.mozilla.org/firefox/addon/qorex/" target="_blank" rel="noopener" style="color:var(--accent);font-weight:800">QoreX</a>, the official QoreChain wallet (Firefox add-on, not installable in Brave), for QoreX-derived accounts. Developers can register with the native CLI or SDK <code>pqc register-key</code>. Registration is not done from this page yet.</div>
-    <button class="ghost" id="howBtn">How wallets work here</button>
+    <button class="ghost" id="howBtn">Set up my quantum-safe account</button>
   </div>
 
   <div class="card">
@@ -517,8 +563,22 @@ async function start() {
 start();
 </script>
 <script>
-document.getElementById("howBtn").onclick = () => document.getElementById("explain").showModal();
-document.getElementById("explainClose").onclick = () => document.getElementById("explain").close();
+const ONB_KEY = "reqo-onboard-v2";
+function openOnboard() { document.getElementById("onboard").showModal(); }
+function closeOnboard() {
+  try { localStorage.setItem(ONB_KEY, "1"); } catch (e) {}
+  document.getElementById("onboard").close();
+}
+function firstTouch() {
+  document.removeEventListener("pointerdown", firstTouch, true);
+  let seen = false;
+  try { seen = !!localStorage.getItem(ONB_KEY); } catch (e) {}
+  if (!seen) openOnboard();
+}
+document.addEventListener("pointerdown", firstTouch, true);
+document.getElementById("howBtn").onclick = openOnboard;
+document.getElementById("onbClose").onclick = closeOnboard;
+document.getElementById("obRelayer").onclick = closeOnboard;
 </script>
 <script type="module">
 const LIB_URL = "https://cdn.jsdelivr.net/npm/@noble/post-quantum@0.5.2/ml-dsa.js/+esm";
