@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.5.0 design wired: steps 1 and 2 -->
+<!-- version: v4.6.0 design wired: steps 1 to 3 -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -124,7 +124,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <input class="field" id="l-supply" inputmode="numeric" placeholder="1000000">
         <div class="lbl">Description</div>
         <textarea class="field" id="l-desc" maxlength="280" placeholder="What is this coin about?"></textarea>
-        <div class="row small muted"><span>Up to 280 characters</span><span id="l-count">0 / 280</span></div>
+        <div class="row small muted"><span id="l-limit">Up to 280 characters</span><span id="l-count">0 / 280</span></div>
         <button class="btn" id="l-review">Review launch</button>
         <div class="note">Launching needs 10 QOR for the trading seed, plus gas. Your account must have an open authorisation window.</div>
       </div>
@@ -198,29 +198,27 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <div class="muted small">Buy or sell tokens from their pool.</div>
         <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
         <div class="lbl">Token</div>
-        <select class="field" id="t-token">
-          <option>$CROAK: Frog Coin</option>
-          <option>$PFK: Proofkick</option>
-          <option>$TCAT: Test Cat</option>
-        </select>
+        <select class="field" id="t-token"><option>Loading tokens...</option></select>
         <div class="lbl" id="t-from-lbl">You pay (WQOR)</div>
         <div class="row"><input class="field" id="t-amount" inputmode="decimal" placeholder="0.0"><button class="chip" id="t-max">Max</button></div>
-        <div class="small muted" style="margin-top:6px">Balance: <span id="t-bal">2.10 WQOR</span></div>
+        <div class="small muted" style="margin-top:6px">Balance: <span id="t-bal">-</span></div>
         <div class="lbl">You receive (estimate)</div>
         <div class="field" id="t-out" style="display:flex;align-items:center;min-height:50px">0.0</div>
+        <div class="small muted" id="t-min" style="margin-top:6px"></div>
         <div class="lbl">Max slippage</div>
-        <div class="seg"><button>1%</button><button class="on">3%</button><button>5%</button></div>
+        <div class="seg"><button id="s-1">1%</button><button class="on" id="s-3">3%</button><button id="s-5">5%</button></div>
         <button class="btn" id="t-go" disabled>Enter an amount</button>
+        <div class="small" id="t-status" style="margin-top:10px;word-break:break-all"></div>
         <div class="note">Trades cost a 0.3% fee, which stays in the pool. You sign the permit and the trade in your wallet.</div>
       </div>
 
       <div class="card">
         <h2>Pool</h2>
-        <div class="muted small">Frog Coin ($CROAK)</div>
-        <div class="row" style="margin-top:12px"><span class="muted">Price</span><b>0.0193 WQOR</b></div>
-        <div class="row"><span class="muted">Pool tokens</span><b>758.18</b></div>
-        <div class="row"><span class="muted">Pool WQOR</span><b>13.20</b></div>
-        <div class="row"><span class="muted">Your balance</span><b>151.16 CROAK</b></div>
+        <div class="muted small" id="p-title">Choose a token</div>
+        <div class="row" style="margin-top:12px"><span class="muted">Price</span><b id="p-price">-</b></div>
+        <div class="row"><span class="muted">Pool tokens</span><b id="p-tok">-</b></div>
+        <div class="row"><span class="muted">Pool WQOR</span><b id="p-wq">-</b></div>
+        <div class="row"><span class="muted">Your balance</span><b id="p-bal">-</b></div>
         <div class="note">Liquidity is supplied at launch and cannot be withdrawn.</div>
       </div>
     </div>
@@ -428,7 +426,7 @@ const CHAIN_HEX = "0x2648";
 const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
 const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
 const FAC_ABI = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)"];
-const ERC20 = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)"];
+const ERC20 = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function description() view returns (string)"];
 const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
 let me = null;
 const short = (a) => a.slice(0, 6) + "..." + a.slice(-4);
@@ -454,6 +452,7 @@ async function connectWallet() {
     me = await (new ethers.BrowserProvider(window.ethereum)).getSigner().then((s) => s.getAddress());
     $("connectBtn").textContent = short(me);
     await loadWallet();
+    if (typeof refreshTrade === "function") refreshTrade().catch(() => {});
     toast("Connected");
   } catch (e) { toast("Connection was not approved"); }
 }
@@ -465,7 +464,10 @@ function renderTokens(rows) {
   for (const r of rows) {
     const row = document.createElement("div");
     row.className = "tok-row";
-    const av = document.createElement("div"); av.className = "avatar"; av.textContent = r.sym[0] || "?";
+    const av = document.createElement("div"); av.className = "avatar";
+    const letter = r.sym[0] || "?";
+    if (r.img) { const im = document.createElement("img"); im.src = r.img; im.alt = r.sym; im.onerror = () => { im.remove(); av.textContent = letter; }; av.append(im); }
+    else av.textContent = letter;
     const meta = document.createElement("div"); meta.className = "tok-meta";
     const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.sym;
     const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = r.sub;
@@ -498,8 +500,8 @@ async function loadWallet() {
     for (let i = 0; i < n; i++) {
       const addr = await fac.tokens(i);
       const t = new ethers.Contract(addr, ERC20, reader);
-      const [sym, name, bal] = await Promise.all([t.symbol(), t.name(), t.balanceOf(me)]);
-      rows.push({ sym, kind: "erc20", addr, sub: name + " · " + short(addr), bal, tag: name });
+      const [sym, name, bal, desc] = await Promise.all([t.symbol(), t.name(), t.balanceOf(me), t.description().catch(() => "")]);
+      rows.push({ sym, kind: "erc20", addr, img: imgFrom(desc), sub: name + " · " + short(addr), bal, tag: name });
     }
     $("w-total").textContent = fmtUnits(qor) + " QOR";
     $("w-count").textContent = rows.length + " assets";
@@ -579,6 +581,7 @@ let launchImageUrl = null, launchDraft = null;
 $("l-file").addEventListener("change", async () => {
   const f = $("l-file").files[0];
   launchImageUrl = null;
+  updateDescLimit();
   if (!f) return;
   if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) { toast("Use a PNG, JPEG, or WebP image"); return; }
   $("l-hint").textContent = "Uploading...";
@@ -589,6 +592,7 @@ $("l-file").addEventListener("change", async () => {
     const j = await r.json();
     if (!r.ok) throw new Error(j.error || "upload failed");
     launchImageUrl = j.url;
+    updateDescLimit();
     $("l-hint").textContent = "Image attached";
   } catch (e) { $("l-hint").textContent = "Upload failed"; toast("Image upload failed: " + errText(e)); }
 });
@@ -666,7 +670,7 @@ $("dlg-sign").onclick = async () => {
     $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
     launchDraft = null; launchImageUrl = null;
     ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
-    $("l-file").value = ""; $("l-count").textContent = "0 / 280"; $("l-hint").textContent = "Tap to choose an image";
+    $("l-file").value = ""; updateDescLimit(); $("l-hint").textContent = "Tap to choose an image";
     $("l-drop").querySelectorAll("img").forEach((i) => i.remove()); $("l-title").textContent = "Add a token image";
     await loadWallet();
   } catch (e) {
@@ -709,6 +713,162 @@ $("snd-go").onclick = async () => {
   } catch (e) { out.textContent = "Stopped: " + errText(e); }
   finally { btn.disabled = false; }
 };
+
+// ---- Step 3: Trade (user signs a permit and a swap request, then submits swap) ----
+function imgFrom(desc) { const m = /img:(https:\/\/[^\s]+)/.exec(desc || ""); return m ? m[1] : null; }
+function updateDescLimit() {
+  const enc = new TextEncoder();
+  const link = launchImageUrl ? enc.encode(" img:" + launchImageUrl).length : 0;
+  const max = Math.max(0, 280 - link);
+  const ta = $("l-desc");
+  ta.maxLength = max;
+  if (ta.value.length > max) { ta.value = ta.value.slice(0, max); toast("Description shortened to leave room for the image link"); }
+  $("l-count").textContent = ta.value.length + " / " + max;
+  $("l-limit").textContent = launchImageUrl ? "Up to " + max + " characters (the image link uses " + link + ")" : "Up to 280 characters";
+}
+$("l-desc").oninput = updateDescLimit;
+
+const FAC_TR = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)", "function poolOf(address) view returns (address)"];
+const POOL_ABI = [
+  "function tokenReserve() view returns (uint256)",
+  "function wqorReserve() view returns (uint256)",
+  "function quoteOut(bool buy, uint256 amountIn) view returns (uint256)",
+  "function swap((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 sv) returns (uint256)",
+];
+const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)"];
+const INTENT_TYPES = { Swap: [{ name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+const PERMIT_TYPES = { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+let tradeTokens = [], tradeSide = "buy", slipPct = 3, tradeBusy = false, tradeBal = { wqor: null, tok: null };
+const curToken = () => tradeTokens[Number($("t-token").value)];
+function tradeStatus(text, hash) {
+  const el = $("t-status"); el.textContent = text;
+  if (hash) { el.append(" "); el.append(hlink(hash)); }
+}
+
+async function loadTradeTokens() {
+  const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
+  const n = Number(await fac.tokenCount());
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const addr = await fac.tokens(i);
+    const pool = await fac.poolOf(addr);
+    if (pool === ethers.ZeroAddress) continue;
+    const t = new ethers.Contract(addr, PERMIT_ABI, reader);
+    const [sym, name] = await Promise.all([t.symbol(), t.name()]);
+    out.push({ addr, pool, sym, name });
+  }
+  tradeTokens = out;
+  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
+  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
+  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name; sel.append(o); });
+  if (keep && Number(keep) < out.length) sel.value = keep;
+  await refreshTrade();
+}
+
+async function refreshTrade() {
+  const t = curToken(); if (!t) return;
+  const pc = new ethers.Contract(t.pool, POOL_ABI, reader);
+  const [tr, wr] = await Promise.all([pc.tokenReserve(), pc.wqorReserve()]);
+  $("p-title").textContent = t.name + " ($" + t.sym + ")";
+  $("p-tok").textContent = fmtUnits(tr); $("p-wq").textContent = fmtUnits(wr);
+  $("p-price").textContent = tr > 0n ? fmtUnits(wr * 10n ** 18n / tr) + " WQOR" : "-";
+  if (me) {
+    const [wb, tb] = await Promise.all([new ethers.Contract(WQOR, PERMIT_ABI, reader).balanceOf(me), new ethers.Contract(t.addr, PERMIT_ABI, reader).balanceOf(me)]);
+    tradeBal = { wqor: wb, tok: tb };
+    $("p-bal").textContent = fmtUnits(tb) + " " + t.sym;
+    $("t-bal").textContent = tradeSide === "buy" ? fmtUnits(wb) + " WQOR" : fmtUnits(tb) + " " + t.sym;
+  } else { tradeBal = { wqor: null, tok: null }; $("p-bal").textContent = "-"; $("t-bal").textContent = "-"; }
+  $("t-from-lbl").textContent = tradeSide === "buy" ? "You pay (WQOR)" : "You pay ($" + t.sym + ")";
+  await tradeQuote();
+}
+
+async function tradeQuote() {
+  const t = curToken(); const go = $("t-go");
+  const s = $("t-amount").value.trim();
+  if (!t) { go.disabled = true; go.textContent = "No token"; return; }
+  if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("t-out").textContent = "0.0"; $("t-min").textContent = ""; go.disabled = !!me; go.textContent = me ? "Enter an amount" : "Connect wallet"; if (!me) go.disabled = false; return; }
+  const buy = tradeSide === "buy";
+  let amountIn;
+  try { amountIn = ethers.parseUnits(s, 18); } catch (e) { go.disabled = true; go.textContent = "Invalid amount"; return; }
+  try {
+    const out = await new ethers.Contract(t.pool, POOL_ABI, reader).quoteOut(buy, amountIn);
+    const min = out * BigInt(100 - slipPct) / 100n;
+    const unit = buy ? t.sym : "WQOR";
+    $("t-out").textContent = fmtUnits(out) + " " + unit;
+    $("t-min").textContent = "Minimum you receive: " + fmtUnits(min) + " " + unit + " (" + slipPct + "% max slippage). Fee 0.3%.";
+  } catch (e) { $("t-out").textContent = "Could not quote"; go.disabled = true; return; }
+  const have = buy ? tradeBal.wqor : tradeBal.tok;
+  if (!me) { go.disabled = false; go.textContent = "Connect wallet"; return; }
+  if (have !== null && amountIn > have) { go.disabled = true; go.textContent = "Insufficient balance"; return; }
+  go.disabled = false; go.textContent = buy ? "Buy" : "Sell";
+}
+
+function setTradeSide(sd) {
+  tradeSide = sd;
+  $("t-buy").classList.toggle("on", sd === "buy");
+  $("t-sell").classList.toggle("on", sd === "sell");
+  $("t-amount").value = ""; $("t-status").textContent = "";
+  refreshTrade().catch(() => {});
+}
+$("t-buy").onclick = () => setTradeSide("buy");
+$("t-sell").onclick = () => setTradeSide("sell");
+$("t-token").onchange = () => { $("t-amount").value = ""; refreshTrade().catch(() => {}); };
+$("t-amount").oninput = () => tradeQuote().catch(() => {});
+$("t-max").onclick = () => {
+  const have = tradeSide === "buy" ? tradeBal.wqor : tradeBal.tok;
+  if (have === null) return toast("Connect your wallet first");
+  $("t-amount").value = ethers.formatUnits(have, 18);
+  tradeQuote().catch(() => {});
+};
+[[1, "s-1"], [3, "s-3"], [5, "s-5"]].forEach(([pct, id]) => { $(id).onclick = () => { slipPct = pct; ["s-1", "s-3", "s-5"].forEach((x) => $(x).classList.toggle("on", x === id)); tradeQuote().catch(() => {}); }; });
+
+$("t-go").onclick = async () => {
+  if (!me) return connectWallet();
+  if (tradeBusy) return;
+  const t = curToken(); if (!t) return;
+  tradeBusy = true; $("t-go").disabled = true; $("t-status").textContent = "";
+  try {
+    const sAmt = $("t-amount").value.trim();
+    if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
+    const amountIn = ethers.parseUnits(sAmt, 18);
+    const buy = tradeSide === "buy";
+    const have = buy ? tradeBal.wqor : tradeBal.tok;
+    if (have !== null && amountIn > have) throw new Error("Insufficient balance");
+    const win = await fetchWindow(me).catch(() => null);
+    if (!win) throw new Error("Could not check your window. Try again.");
+    if (!win.live) throw new Error("No open window on your account. Open one in QoreX, then trade again.");
+    const signer = await getSigner();
+    const trader = await signer.getAddress();
+    const pool = t.pool;
+    const inTok = buy ? WQOR : t.addr;
+    const quote = await new ethers.Contract(pool, POOL_ABI, reader).quoteOut(buy, amountIn);
+    const minOut = quote * BigInt(100 - slipPct) / 100n;
+    const now = Math.floor(Date.now() / 1000);
+    const intent = { trader, buy, amountIn, minOut, nonce: BigInt(Date.now()), deadline: BigInt(now + 900) };
+    const inMeta = new ethers.Contract(inTok, PERMIT_ABI, reader);
+    const [inName, nonce] = await Promise.all([inMeta.name(), inMeta.nonces(trader)]);
+    const permitDeadline = BigInt(now + 900);
+
+    tradeStatus("1 of 3: sign the permit in your wallet (no gas).");
+    const permitSig = ethers.Signature.from(await signer.signTypedData(
+      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES,
+      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline }));
+    tradeStatus("2 of 3: sign the trade request in your wallet (no gas).");
+    const intentSig = await signer.signTypedData({ name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool }, INTENT_TYPES, intent);
+    tradeStatus("3 of 3: confirm the transaction in your wallet.");
+    const tx = await new ethers.Contract(pool, POOL_ABI, signer).swap(intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s);
+    tradeStatus("Submitted:", tx.hash);
+    await tx.wait();
+    tradeStatus((buy ? "Bought " : "Sold ") + "$" + t.sym + ". Confirmed:", tx.hash);
+    $("t-amount").value = "";
+    await loadWallet();
+  } catch (e) { tradeStatus("Stopped: " + errText(e)); }
+  finally { tradeBusy = false; await refreshTrade().catch(() => {}); }
+};
+
+loadTradeTokens().catch(() => { $("t-token").textContent = ""; const o = document.createElement("option"); o.textContent = "Could not load tokens"; $("t-token").append(o); });
+setInterval(() => { if (tradeTokens.length && !tradeBusy) refreshTrade().catch(() => {}); }, 30000);
+updateDescLimit();
 </script>
 </body>
 </html>
