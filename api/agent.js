@@ -3,7 +3,7 @@
 // Every field it returns is validated here before the page shows it.
 
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile"; // set GROQ_MODEL in Vercel to any model ID from console.groq.com
 const MAX_TURNS = 12;
 const MAX_CHARS = 1000;
 const MAX_PER_HOUR = 30;
@@ -73,7 +73,10 @@ module.exports = async (req, res) => {
         messages: [{ role: "system", content: SYSTEM }, ...history],
       }),
     });
-    if (!r.ok) return res.status(502).json({ error: "agent is unavailable right now (HTTP " + r.status + ")" });
+    if (!r.ok) {
+      const detail = (await r.text()).replace(/gsk_[A-Za-z0-9]+/g, "[key]").slice(0, 300);
+      return res.status(502).json({ error: "agent is unavailable right now (HTTP " + r.status + ")", model: MODEL, detail });
+    }
     const j = await r.json();
     const text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || "";
 
