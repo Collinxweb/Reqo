@@ -2,3 +2,6 @@
 .env
 *.key
 node_modules
+out/
+lib/
+cache/
