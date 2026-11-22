@@ -232,6 +232,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v4.7.5 | 2026-11-22 | (pending) | Root cause of 'no open window' with an open QoreX window: the browser calls the chain REST API directly, and that call is blocked by CORS, so the page could not read the window. The readiness check caught that error and reported 'no open window'. Fix: window lookup moved to `api/window.js`, a server function that returns the window status (no keys, input validated as qor1). Launch, Trade, and Send now show the real error instead of 'closed'. |
 | v4.7.4 | 2026-11-22 | (pending) | Window checks show the `qor1` account they are checking (Launch readiness, Trade, Send), so a QoreX window on a different account can be found. Diagnosis for 'window closed' with an open window: the connected address does not match the QoreX account (Q3 unresolved). |
 | v4.7.3 | 2026-11-22 | (pending) | Build badge removed from the header. Every token shows an avatar: its image when its description has an `img:` link, otherwise a colored letter tile, in Dashboard, Trade, and Wallet. Image link match accepts http and https. Note: the Claude preview blocks network requests from pages (its frame copies request headers, which cannot be cloned). Test the app only on reqo-seven.vercel.app. |
 | v4.7.2 | 2026-11-22 | (pending) | Fix: tab switching calls `history.replaceState`, which sandboxed previews (for example a chat preview iframe) block. That threw and stopped the page script before the Dashboard loaded. The call is now guarded; the tab still switches. Tested with history changes blocked. |
@@ -305,6 +306,7 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I36 | Option 1 assumes one seed gives the same 0x and qor1 account in QoreX and MetaMask | If not, linking is to a different account and direct sends show 'closed' | Ask QoreChain; confirm with a test seed before launch | Open, question to QoreChain |
+| I45 | Browser cannot call the chain REST API (CORS); page reported 'no open window' whenever the call failed | Launch, Trade, and Send blocked with an open window | Server-side `api/window.js`; errors shown (v4.7.5) | Built, pending live test |
 | I44 | 'Window closed' while the QoreX window is open: connected wallet address differs from the QoreX account, or the account mapping (Q3) is not confirmed | Launch and Trade blocked | Show the checked account; compare with QoreX; confirm Q3 | Open |
 | I43 | Preview shows 'Headers object could not be cloned' on every network call | Dashboard and Wallet cannot load inside the Claude preview | Not a Reqo code path. Test on the live site only | Closed for the app; preview not supported |
 | I42 | `history.replaceState` blocked in sandboxed previews, stopping the script before the Dashboard loads | Dashboard stuck on 'Loading tokens' in previews | Guarded (v4.7.2) | Built, pending live check |

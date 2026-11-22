@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.7.4 design wired: steps 1 to 4, account shown in window checks -->
+<!-- version: v4.7.5 design wired: steps 1 to 4, window checks through /api/window -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -524,9 +524,11 @@ function qorAddress(evm) {
   return hrp + "1" + data.concat(chk).map((d) => BCH[d]).join("");
 }
 async function fetchWindow(addr) {
-  const r = await fetch(API + "/qorechain/pqc/v1/evm_window/" + qorAddress(addr));
-  if (!r.ok) throw new Error("window status HTTP " + r.status);
-  return r.json();
+  // Served by /api/window (server side) because the browser cannot call the chain REST API directly.
+  const r = await fetch("/api/window?qor=" + qorAddress(addr));
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || ("window check failed (HTTP " + r.status + ")"));
+  return j;
 }
 async function getSigner() {
   if (!window.ethereum) throw new Error("Open Reqo in a wallet browser");
@@ -572,10 +574,11 @@ $("l-file").addEventListener("change", async () => {
 
 async function readiness() {
   const qor = await reader.getBalance(me);
-  let win = null; try { win = await fetchWindow(me); } catch (e) {}
+  let win = null, winErr = null;
+  try { win = await fetchWindow(me); } catch (e) { winErr = e.message || String(e); }
   const open = !!(win && win.live);
   const enough = qor >= ethers.parseEther("10.5");
-  return { ok: open && enough, text: "Checking account " + qorAddress(me) + ": " + (open ? "window open." : "no open window found for this address. Open the window in QoreX for the same account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
+  return { ok: open && enough, text: "Account " + qorAddress(me) + ": " + (winErr ? "could not check the window (" + winErr + "). Try again in a moment." : open ? "window open." : "no open window for this account. Open the window in QoreX for this account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
 }
 
 $("l-review").onclick = async () => {
@@ -677,8 +680,7 @@ $("snd-go").onclick = async () => {
     if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
     const amt = ethers.parseUnits(sAmt, 18);
     if (amt > a.bal) throw new Error("Insufficient " + a.sym + ": you have " + fmtUnits(a.bal));
-    const win = await fetchWindow(me).catch(() => null);
-    if (!win) throw new Error("Could not check your window. Try again.");
+    const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
     if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then send again.");
     const signer = await getSigner();
     const tx = a.kind === "native" ? await signer.sendTransaction({ to, value: amt }) : await (new ethers.Contract(a.addr, WQ_FULL, signer)).transfer(to, amt);
@@ -813,8 +815,7 @@ $("t-go").onclick = async () => {
     const buy = tradeSide === "buy";
     const have = buy ? tradeBal.wqor : tradeBal.tok;
     if (have !== null && amountIn > have) throw new Error("Insufficient balance");
-    const win = await fetchWindow(me).catch(() => null);
-    if (!win) throw new Error("Could not check your window. Try again.");
+    const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
     if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
     const signer = await getSigner();
     const trader = await signer.getAddress();
