@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.10.0 design wired: Reqo AI chat, activity log -->
+<!-- version: v4.10.1 design wired: clearer connect errors -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -335,7 +335,7 @@ function applyTheme(t) {
 $("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
 applyTheme(document.documentElement.dataset.theme || "dark");
 
-function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2000); }
+function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms || 2000); }
 
 const views = ["launch", "trade", "dashboard", "wallet", "ai"];
 function show(name) {
@@ -499,17 +499,24 @@ async function ensureChain(p) {
 }
 
 async function connectWallet() {
-  if (!eth()) return toast("Open Reqo in a wallet browser to connect");
+  const provider = eth();
+  if (!provider) return toast("No wallet found. Open Reqo in a wallet browser.", 5000);
+  let step = "asking the wallet for access";
   try {
-    const p = new ethers.BrowserProvider(eth());
+    const p = new ethers.BrowserProvider(provider);
     await p.send("eth_requestAccounts", []);
+    step = "switching to QoreChain Diana (chain 9800)";
     await ensureChain(p);
-    me = await (new ethers.BrowserProvider(eth())).getSigner().then((s) => s.getAddress());
+    step = "reading the account";
+    me = await (new ethers.BrowserProvider(provider)).getSigner().then((x) => x.getAddress());
     $("connectBtn").textContent = short(me);
     await loadWallet();
     if (typeof refreshTrade === "function") refreshTrade().catch(() => {});
-    toast("Connected");
-  } catch (e) { toast("Connection was not approved"); }
+    toast("Connected: " + short(me), 3000);
+  } catch (e) {
+    me = null;
+    toast("Connect stopped while " + step + ": " + errText(e), 7000);
+  }
 }
 $("connectBtn").onclick = () => {
   if (walletProviders.length > 1 && !activeEth) return openWalletPicker();
