@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.10.1 design wired: clearer connect errors -->
+<!-- version: v4.10.2 design wired: network switch fallback -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -490,12 +490,23 @@ const fmtUnits = (x) => Number(ethers.formatUnits(x, 18)).toLocaleString(undefin
 async function ensureChain(p) {
   const net = await p.getNetwork();
   if (Number(net.chainId) === CHAIN_ID) return;
+  const params = { chainId: CHAIN_HEX, chainName: "QoreChain Diana Testnet", nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: [RPC], blockExplorerUrls: ["https://dashboard.qorechain.io"] };
+  let switchErr = null;
   try { await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]); }
-  catch (e) {
-    const code = e.code ?? (e.info && e.info.error && e.info.error.code);
-    if (code === 4902) await p.send("wallet_addEthereumChain", [{ chainId: CHAIN_HEX, chainName: "QoreChain Diana Testnet", nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: [RPC] }]);
-    else throw e;
+  catch (e) { switchErr = e; }
+  if (!switchErr) {
+    const after = await p.getNetwork();
+    if (Number(after.chainId) === CHAIN_ID) return;
   }
+  // Wallets report an unknown or refused switch in different ways, so add the network and switch again.
+  try {
+    await p.send("wallet_addEthereumChain", [params]);
+    await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]).catch(() => {});
+  } catch (addErr) {
+    throw new Error("the wallet would not switch to Diana (" + errText(switchErr || addErr) + "; add network: " + errText(addErr) + ")");
+  }
+  const final = await p.getNetwork();
+  if (Number(final.chainId) !== CHAIN_ID) throw new Error("the wallet is still on chain " + Number(final.chainId) + ", not Diana (9800)");
 }
 
 async function connectWallet() {

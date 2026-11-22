@@ -235,6 +235,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v4.10.2 | 2026-11-22 | (pending) | Network switch: if the wallet refuses or fails to switch to Diana, the page adds the network and switches again, then checks that the wallet is on chain 9800. Errors name the step. Reqo AI still returns 404 until `api/agent.js` is pushed to the repo. |
 | v4.10.1 | 2026-11-22 | (pending) | Connect reports the step that failed (asking for access, switching to Diana, reading the account) and the wallet's own error, instead of 'Connection was not approved' for every failure. Reqo AI shows HTTP 404 because `api/agent.js` is not in the repo; the file is `reqo-v3.0-api-agent.js`. |
 | v4.10.0 | 2026-11-22 | (pending) | Reqo AI wired to `/api/agent` (Groq, server-side key): chat history sent each turn, reply shown, image uploaded through `/api/upload` and used as the token image, and a returned draft fills the Launch form with a button to open the review. The agent never signs. Activity wired: launches, trades, and sends made in Reqo are recorded per wallet on this device, with All, Sent, Trades and Launches filters. Chain-wide history from other devices is not yet read. |
 | v4.9.0 | 2026-11-22 | (pending) | Wallet picker: wallets are discovered with EIP-6963, so QoreX and MetaMask appear as separate choices when both are installed. The choice is remembered. Every wallet call goes through the chosen provider. Source confirmed: QoreX Chrome Web Store listing (v0.4.3, QoreChain Team): on connect, a dApp sees the user's public qor1 address after approval. Mises browser support for Chrome Web Store extensions on Android is unverified. |
@@ -314,6 +315,7 @@ Newest first.
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I36 | Option 1 assumes one seed gives the same 0x and qor1 account in QoreX and MetaMask | If not, linking is to a different account and direct sends show 'closed' | Ask QoreChain; confirm with a test seed before launch | Open, question to QoreChain |
 | I48 | Connect reported 'Connection was not approved' for every failure, hiding the step that failed | Users could not tell whether the approval or the network switch failed | Step-specific error (v4.10.1); test with QoreX | Built, pending test |
+| I50 | QoreX refused the chain switch with an error the page did not handle, so connect stopped | Connect blocked | Add-then-switch fallback and chain verification (v4.10.2) | Built, pending test |
 | I49 | `api/agent.js` missing from the repo: Reqo AI returns HTTP 404 | Reqo AI unusable | Push `reqo-v3.0-api-agent.js` as `api/agent.js` | Open |
 | I47 | Reqo AI depends on GROQ_API_KEY being set and deployed | Chat shows an error until the variable is live | Check with the curl test in the deploy steps | Open |
 | I46 | Mises browser on Android may not load Chrome Web Store extensions | QoreX may not appear on the user's phone | Test on Mises; fall back to desktop Chrome or Brave | Open |
