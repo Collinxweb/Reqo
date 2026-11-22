@@ -232,6 +232,7 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v4.7.0 | 2026-11-21 | (pending) | Dashboard wired: live token list from the factory (newest first) with logos from the description image link, supply, creator, pool size; tap opens the token in Trade; your launch shows as In progress while signing. Trade pool card shows the token logo. Trade and Wallet load tokens in parallel. Page shows a build badge that reads 'loading' until the script finishes, and an error banner for script errors. Placeholder handlers now say 'reload' instead of 'wired in the next step'. |
 | v4.6.0 | 2026-11-21 | (pending) | Trade wired: token list from the factory, live pool reserves, price, quote, slippage 1/3/5%, balance check, window check, and a user-submitted swap (permit and trade request signed in the wallet, then `swap` sent by the user). Token images from the description link now show in the Wallet token list. Launch description limit now subtracts the image link so a full-length description no longer fails review. |
 | v4.5.0 | 2026-11-20 | (pending) | Restart on the agreed scope: Dashboard, Launch, Trade, Wallet, Reqo AI as five tabs; no relayer. Design is now the home page (`index.html`); the previous launch page is at `launch.html`. Wired so far: Connect (Diana switch), live balances for QOR, WQOR and all Reqo tokens, Receive, Send (checks the window first), and Launch (image upload, review, three user-signed transactions: wrap, approve, create). Trade, Dashboard, activity history, and Reqo AI are still placeholders. Fixed a 404 at the root caused by a missing `index.html` after the move. |
 | v2.17.1 | 2026-11-20 | (pending) | Onboarding: 'Got it' and 'Continue with the relayer' close the guide with inline handlers (independent of script order); backdrop click closes it. Step 3 explains the first transaction: request test QOR from the QoreChain dashboard Faucet for the qor1 address, then send from QoreX. Step 4 wording fixed. |
@@ -300,6 +301,7 @@ Newest first.
 | I16 | Signed swap execution not yet tested on Diana | Trading unverified | Test with a throwaway trader and the owner relayer | **Resolved**: swap test 8/8 on Diana |
 | I20 | Tokens launched on v2 (for example Proofkick) have no pool and cannot be traded | Those tokens show no pool; they remain as records | Relaunch on v3 | Open |
 | I36 | Option 1 assumes one seed gives the same 0x and qor1 account in QoreX and MetaMask | If not, linking is to a different account and direct sends show 'closed' | Ask QoreChain; confirm with a test seed before launch | Open, question to QoreChain |
+| I40 | Live page showed v4.6 markup but the old Launch placeholder message; cause not reproduced (script attaches handlers in a simulated run, no missing element ids). Likely a stale tab or a script error in the real browser. | Launch and Trade appeared unwired | Build badge and error banner added (v4.7.0) to expose the cause | Open, pending live check |
 | I39 | Description plus image link exceeded 280 bytes for a full-length description | Launch review rejected the launch | Counter and limit now account for the link (v4.6.0) | Built, pending live test |
 | I38 | Onboarding close buttons did not dismiss the guide | Users could not leave the guide | Inline handlers (v2.17.1); pending live test | Built |
 | I37 | Account endpoint takes a qor1 address (assumed); response fields unknown | Registration shows raw text only | Confirm format on docs.qorechain.io | Open |
@@ -337,11 +339,13 @@ Each update follows this block, and each release adds an entry to the changelog 
 
 ## 13. Next Steps
 
-1. Verify the ML-DSA library export and version (I31), then test key creation, signature test, backup, restore, and delete on a phone.
-2. Get QoreChain's answers to the three ML-DSA questions. Phase 2 (registration through QoreX) waits on them.
-3. Native QOR as the default wallet account: balances and transfers first (Phase 3).
-4. Relaunch Proofkick through the relayer and read the error text if it fails (I28).
-5. Move the relayer to a dedicated testnet account and persist the rate limit (I9, I10).
+1. Deploy v4.7.0 and confirm the build badge reads v4.7.0, not 'loading'. If it stays on 'loading', read the error banner.
+2. Live test Launch: Review launch, readiness line, then Sign and create. Confirm the token appears on the Dashboard with its logo.
+3. Live test Trade: buy and sell with the user-signed swap.
+4. Wire Reqo AI to the agent endpoint (needs `GROQ_API_KEY` in Vercel).
+5. Wallet activity history.
+6. Rubric items: scoped window, pqcVerify, QCAI audit, Foundry or Hardhat tests (blocked on QoreChain answers).
+7. Rewrite the README for the no-relayer design; add AI_USAGE.md.
 
 ## 14. Swap Design (route A in use)
 

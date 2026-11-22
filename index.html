@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.6.0 design wired: steps 1 to 3 -->
+<!-- version: v4.7.0 design wired: steps 1 to 4 -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -101,10 +101,12 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </style>
 </head>
 <body>
+<div id="errbar" hidden onclick="this.hidden=true" style="position:fixed;top:0;left:0;right:0;z-index:50;background:#b23b3b;color:#fff;padding:8px 12px;font-size:12px;line-height:1.4"></div>
 <div class="wrap">
   <header>
     <img src="logo.png" alt="Reqo">
     <div class="brand">REQO</div>
+    <span class="badge" id="build">v4.7.0 loading</span>
     <div class="sp"></div>
     <button class="icon-btn" id="themeBtn" title="Theme" aria-label="Toggle theme"></button>
     <button class="pill" id="connectBtn">Connect wallet</button>
@@ -145,48 +147,13 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
   <!-- DASHBOARD -->
   <section id="view-dashboard" hidden>
-    <div id="launch-dash">
-      <div class="card">
-        <h2>Dashboard</h2>
-        <div class="muted small">Tokens launched on Reqo, and launches in progress.</div>
-
-        <div class="lbl">In progress</div>
-        <div class="tok-row">
-          <div class="avatar">M</div>
-          <div class="tok-meta">
-            <div class="tok-name">Moon Frog <span class="badge">$MFROG</span></div>
-            <div class="tok-sub">Step 2 of 3: approve the factory. Waiting for your signature.</div>
-          </div>
-          <span class="badge">Pending</span>
-        </div>
-
-        <div class="lbl">Recently launched</div>
-        <div class="tok-row">
-          <div class="avatar">C</div>
-          <div class="tok-meta">
-            <div class="tok-name">Frog Coin <span class="badge">$CROAK</span></div>
-            <div class="tok-sub">1,000,000 supply · by 0x9f1c…2b07 · 19 Nov, 22:31</div>
-          </div>
-          <div class="tok-val">Pool seeded</div>
-        </div>
-        <div class="tok-row">
-          <div class="avatar">P</div>
-          <div class="tok-meta">
-            <div class="tok-name">Proofkick <span class="badge">$PFK</span></div>
-            <div class="tok-sub">9,496,594.75 supply · by 0x9d87…40Ef · 18 Nov</div>
-          </div>
-          <div class="tok-val">Pool seeded</div>
-        </div>
-        <div class="tok-row">
-          <div class="avatar">T</div>
-          <div class="tok-meta">
-            <div class="tok-name">Test Cat <span class="badge">$TCAT</span></div>
-            <div class="tok-sub">1,000 supply · by 0xC37C…0a1B · 17 Nov</div>
-          </div>
-          <div class="tok-val">Pool seeded</div>
-        </div>
-        <div class="note">Shows every token created by the Reqo factory, newest first. Live data is connected in the next step.</div>
-      </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:4px"><h2 style="margin:0">Dashboard</h2><button class="chip" id="d-refresh" style="margin:0">Refresh</button></div>
+      <div class="muted small">Tokens launched on Reqo, and your launch in progress.</div>
+      <div id="d-progress-wrap" hidden><div class="lbl">In progress</div><div id="d-progress"></div></div>
+      <div class="lbl">Launched on Reqo <span id="d-count" class="muted"></span></div>
+      <div id="d-list" class="muted">Loading tokens...</div>
+      <div class="note">Newest first. Tap a token to trade it.</div>
     </div>
   </section>
 
@@ -214,7 +181,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
       <div class="card">
         <h2>Pool</h2>
-        <div class="muted small" id="p-title">Choose a token</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:8px"><div class="avatar" id="p-logo">?</div><div id="p-title" style="font-weight:800">Choose a token</div></div>
         <div class="row" style="margin-top:12px"><span class="muted">Price</span><b id="p-price">-</b></div>
         <div class="row"><span class="muted">Pool tokens</span><b id="p-tok">-</b></div>
         <div class="row"><span class="muted">Pool WQOR</span><b id="p-wq">-</b></div>
@@ -316,6 +283,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+function showErr(msg) { const b = document.getElementById("errbar"); if (!b) return; b.textContent = "Reqo error: " + msg + " (tap to dismiss)"; b.hidden = false; }
+window.addEventListener("error", (e) => showErr(e.message + (e.lineno ? " (line " + e.lineno + ")" : "")));
+window.addEventListener("unhandledrejection", (e) => showErr((e.reason && (e.reason.shortMessage || e.reason.message)) || String(e.reason)));
+if (typeof ethers === "undefined") showErr("The wallet library did not load. Check your connection and reload the page.");
 const sun = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
 const moon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
 function applyTheme(t) {
@@ -360,7 +331,7 @@ $("l-file").onchange = () => {
   $("l-title").textContent = f.name;
   $("l-hint").textContent = "Tap to change";
 };
-$("l-review").onclick = () => toast("Review step is next: connect a wallet to continue");
+$("l-review").onclick = () => toast("This page did not finish loading. Reload it, then try again.");
 
 // Trade: direction and amount
 let side = "buy";
@@ -381,7 +352,7 @@ $("t-amount").oninput = () => {
   $("t-out").textContent = ok ? (side === "buy" ? (v * 50.2).toFixed(2) + " CROAK" : (v * 0.0193).toFixed(4) + " WQOR") : "0.0";
 };
 $("t-max").onclick = () => { $("t-amount").value = side === "buy" ? "2.10" : "151.16"; $("t-amount").dispatchEvent(new Event("input")); };
-$("t-go").onclick = () => toast("Trading is wired in the next step");
+$("t-go").onclick = () => toast("This page did not finish loading. Reload it, then try again.");
 
 // Wallet
 
@@ -497,12 +468,13 @@ async function loadWallet() {
     rows.push({ sym: "WQOR", kind: "erc20", addr: WQOR, sub: "Wrapped QOR · quote asset", bal: await w.balanceOf(me), tag: "Quote" });
     const fac = new ethers.Contract(FACTORY, FAC_ABI, reader);
     const n = Number(await fac.tokenCount());
-    for (let i = 0; i < n; i++) {
+    const tokenRows = await Promise.all(Array.from({ length: n }, (_, i) => i).map(async (i) => {
       const addr = await fac.tokens(i);
       const t = new ethers.Contract(addr, ERC20, reader);
       const [sym, name, bal, desc] = await Promise.all([t.symbol(), t.name(), t.balanceOf(me), t.description().catch(() => "")]);
-      rows.push({ sym, kind: "erc20", addr, img: imgFrom(desc), sub: name + " · " + short(addr), bal, tag: name });
-    }
+      return { sym, kind: "erc20", addr, img: imgFrom(desc), sub: name + " · " + short(addr), bal, tag: name };
+    }));
+    rows.push(...tokenRows);
     $("w-total").textContent = fmtUnits(qor) + " QOR";
     $("w-count").textContent = rows.length + " assets";
     window.walletAssets = rows;
@@ -640,6 +612,8 @@ $("dlg-sign").onclick = async () => {
   if (!launchDraft) return;
   const btn = $("dlg-sign"); btn.disabled = true;
   $("dlg-steps").textContent = ""; $("dlg-result").textContent = "";
+  const pg = { name: launchDraft.name, symbol: launchDraft.symbol };
+  setProgress({ ...pg, text: "Starting..." });
   try {
     const signer = await getSigner();
     const addr = await signer.getAddress();
@@ -648,19 +622,19 @@ $("dlg-sign").onclick = async () => {
 
     const bal = await wq.balanceOf(addr);
     if (bal < SEED) {
-      const s1 = addStep("1. Wrap QOR into WQOR: confirm in your wallet");
+      setProgress({ ...pg, text: "Step 1 of 3: wrap QOR into WQOR. Confirm in your wallet." }); const s1 = addStep("1. Wrap QOR into WQOR: confirm in your wallet");
       const tx = await wq.deposit({ value: SEED - bal });
       s1.textContent = "1. Wrap submitted. "; s1.append(hlink(tx.hash));
       await tx.wait(); s1.textContent = "1. Wrap confirmed. "; s1.append(hlink(tx.hash));
     }
     const al = await wq.allowance(addr, FACTORY);
     if (al < SEED) {
-      const s2 = addStep("2. Approve the factory: confirm in your wallet");
+      setProgress({ ...pg, text: "Step 2 of 3: approve the factory. Confirm in your wallet." }); const s2 = addStep("2. Approve the factory: confirm in your wallet");
       const tx = await wq.approve(FACTORY, SEED);
       s2.textContent = "2. Approve submitted. "; s2.append(hlink(tx.hash));
       await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
     }
-    const s3 = addStep("3. Create the token: confirm in your wallet");
+    setProgress({ ...pg, text: "Step 3 of 3: create the token. Confirm in your wallet." }); const s3 = addStep("3. Create the token: confirm in your wallet");
     const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, launchDraft.supply, launchDraft.description);
     s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
     const rc = await tx.wait();
@@ -669,12 +643,14 @@ $("dlg-sign").onclick = async () => {
     s3.textContent = "3. Create confirmed. "; s3.append(hlink(tx.hash));
     $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
     launchDraft = null; launchImageUrl = null;
+    setProgress(null); loadDashboard().catch(() => {}); loadTradeTokens().catch(() => {});
     ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
     $("l-file").value = ""; updateDescLimit(); $("l-hint").textContent = "Tap to choose an image";
     $("l-drop").querySelectorAll("img").forEach((i) => i.remove()); $("l-title").textContent = "Add a token image";
     await loadWallet();
   } catch (e) {
     addStep("Stopped: " + errText(e), true);
+    setProgress({ ...pg, text: "Stopped: " + errText(e), failed: true });
     btn.disabled = false;
   }
 };
@@ -728,6 +704,7 @@ function updateDescLimit() {
 }
 $("l-desc").oninput = updateDescLimit;
 
+const TOK_META = ["function name() view returns (string)", "function symbol() view returns (string)", "function description() view returns (string)", "function creator() view returns (address)", "function totalSupply() view returns (uint256)"];
 const FAC_TR = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)", "function poolOf(address) view returns (address)"];
 const POOL_ABI = [
   "function tokenReserve() view returns (uint256)",
@@ -748,15 +725,15 @@ function tradeStatus(text, hash) {
 async function loadTradeTokens() {
   const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
   const n = Number(await fac.tokenCount());
-  const out = [];
-  for (let i = 0; i < n; i++) {
+  const all = await Promise.all(Array.from({ length: n }, (_, i) => i).map(async (i) => {
     const addr = await fac.tokens(i);
     const pool = await fac.poolOf(addr);
-    if (pool === ethers.ZeroAddress) continue;
-    const t = new ethers.Contract(addr, PERMIT_ABI, reader);
-    const [sym, name] = await Promise.all([t.symbol(), t.name()]);
-    out.push({ addr, pool, sym, name });
-  }
+    if (pool === ethers.ZeroAddress) return null;
+    const t = new ethers.Contract(addr, TOK_META, reader);
+    const [sym, name, desc] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => "")]);
+    return { addr, pool, sym, name, img: imgFrom(desc) };
+  }));
+  const out = all.filter(Boolean);
   tradeTokens = out;
   const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
   if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
@@ -770,6 +747,7 @@ async function refreshTrade() {
   const pc = new ethers.Contract(t.pool, POOL_ABI, reader);
   const [tr, wr] = await Promise.all([pc.tokenReserve(), pc.wqorReserve()]);
   $("p-title").textContent = t.name + " ($" + t.sym + ")";
+  setAvatar($("p-logo"), t.img, t.sym[0]);
   $("p-tok").textContent = fmtUnits(tr); $("p-wq").textContent = fmtUnits(wr);
   $("p-price").textContent = tr > 0n ? fmtUnits(wr * 10n ** 18n / tr) + " WQOR" : "-";
   if (me) {
@@ -869,6 +847,65 @@ $("t-go").onclick = async () => {
 loadTradeTokens().catch(() => { $("t-token").textContent = ""; const o = document.createElement("option"); o.textContent = "Could not load tokens"; $("t-token").append(o); });
 setInterval(() => { if (tradeTokens.length && !tradeBusy) refreshTrade().catch(() => {}); }, 30000);
 updateDescLimit();
+
+// ---- Step 4: Dashboard (live from the factory) ----
+function setAvatar(el, img, letter) {
+  el.textContent = "";
+  if (img) { const im = document.createElement("img"); im.src = img; im.alt = ""; im.referrerPolicy = "no-referrer"; im.onerror = () => { im.remove(); el.textContent = letter || "?"; }; el.append(im); }
+  else el.textContent = letter || "?";
+}
+function tokenRow(r, onClick) {
+  const row = document.createElement("div"); row.className = "tok-row"; row.style.cursor = onClick ? "pointer" : "default";
+  const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, (r.symbol || "?")[0]);
+  const meta = document.createElement("div"); meta.className = "tok-meta";
+  const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.name + " ";
+  const tk = document.createElement("span"); tk.className = "badge"; tk.textContent = "$" + r.symbol; nm.append(tk);
+  const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = r.sub;
+  meta.append(nm, sub);
+  if (r.desc) { const d = document.createElement("div"); d.className = "tok-sub"; d.textContent = r.desc; meta.append(d); }
+  const right = document.createElement("div"); right.style.textAlign = "right";
+  const badge = document.createElement("span"); badge.className = "badge" + (r.good ? " good" : ""); badge.textContent = r.badge; right.append(badge);
+  if (r.extra) { const x = document.createElement("div"); x.className = "tok-val"; x.textContent = r.extra; right.append(x); }
+  row.append(av, meta, right);
+  if (onClick) row.onclick = onClick;
+  return row;
+}
+function setProgress(p) {
+  const wrap = $("d-progress-wrap"), box = $("d-progress");
+  box.textContent = "";
+  if (!p) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  box.append(tokenRow({ name: p.name, symbol: p.symbol, sub: p.text, badge: p.failed ? "Stopped" : "Pending" }));
+}
+function openTradeFor(addr) {
+  const i = tradeTokens.findIndex((t) => t.addr === addr);
+  if (i >= 0) { $("t-token").value = String(i); $("t-amount").value = ""; refreshTrade().catch(() => {}); }
+  show("trade");
+}
+async function loadDashboard() {
+  const list = $("d-list");
+  try {
+    const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
+    const n = Number(await fac.tokenCount());
+    $("d-count").textContent = n ? "(" + n + ")" : "";
+    if (!n) { list.textContent = "No tokens launched yet."; return; }
+    const rows = await Promise.all(Array.from({ length: n }, (_, k) => n - 1 - k).map(async (i) => {
+      const addr = await fac.tokens(i);
+      const pool = await fac.poolOf(addr);
+      const t = new ethers.Contract(addr, TOK_META, reader);
+      const [symbol, name, desc, creator, supply] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => ""), t.creator().catch(() => ""), t.totalSupply()]);
+      let wq = null;
+      if (pool !== ethers.ZeroAddress) { try { wq = await new ethers.Contract(pool, POOL_ABI, reader).wqorReserve(); } catch (e) {} }
+      return { addr, symbol, name, img: imgFrom(desc), desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90), sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : ""), badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null, extra: wq !== null ? fmtUnits(wq) + " WQOR" : "" };
+    }));
+    list.textContent = "";
+    for (const r of rows) list.append(tokenRow(r, () => openTradeFor(r.addr)));
+  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
+}
+$("d-refresh").onclick = () => { $("d-list").textContent = "Loading tokens..."; loadDashboard(); };
+loadDashboard();
+setInterval(() => { loadDashboard().catch(() => {}); }, 60000);
+$("build").textContent = "v4.7.0";
 </script>
 </body>
 </html>
