@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.8.0 design wired: trade in QOR (auto wrap and unwrap) -->
+<!-- version: v4.9.0 design wired: wallet picker (EIP-6963) -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -277,10 +277,51 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <button class="btn ghost" id="snd-close">Close</button>
   <div class="note">Direct sends need an open authorisation window on your account. Reqo checks it first.</div>
 </dialog>
+<dialog id="dlg-wallet">
+  <div class="dlg-title">Choose a wallet</div>
+  <div class="small muted">Pick the wallet that holds the account you want to use. Reqo shows the qor1 address it connects to.</div>
+  <div id="wallet-list"></div>
+  <button class="btn ghost" id="dlg-wallet-close" style="margin-top:12px">Cancel</button>
+</dialog>
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <script>
+// ---- Wallet selection (EIP-6963 discovery: QoreX, MetaMask, and any other installed wallet) ----
+let walletProviders = [];
+let activeEth = null;
+function eth() { return activeEth || window.ethereum || null; }
+window.addEventListener("eip6963:announceProvider", (e) => {
+  const d = e.detail;
+  if (d && d.info && d.provider && !walletProviders.some((w) => w.info.uuid === d.info.uuid)) walletProviders.push(d);
+});
+window.dispatchEvent(new Event("eip6963:requestProvider"));
+setTimeout(() => {
+  try {
+    const saved = localStorage.getItem("reqo-wallet");
+    const hit = walletProviders.find((w) => w.info.rdns === saved);
+    if (hit) activeEth = hit.provider;
+    else if (walletProviders.length === 1) activeEth = walletProviders[0].provider;
+  } catch (e) {}
+}, 300);
+function chooseWallet(d) {
+  activeEth = d.provider;
+  try { localStorage.setItem("reqo-wallet", d.info.rdns); } catch (e) {}
+  toast("Using " + d.info.name);
+  connectWallet();
+}
+function openWalletPicker() {
+  const box = $("wallet-list");
+  box.textContent = "";
+  for (const d of walletProviders) {
+    const b = document.createElement("button");
+    b.className = "btn ghost"; b.style.marginTop = "8px";
+    b.textContent = d.info.name;
+    b.onclick = () => { $("dlg-wallet").close(); chooseWallet(d); };
+    box.append(b);
+  }
+  $("dlg-wallet").showModal();
+}
 const $ = (id) => document.getElementById(id);
 function showErr(msg) { const b = document.getElementById("errbar"); if (!b) return; b.textContent = "Reqo error: " + msg + " (tap to dismiss)"; b.hidden = false; }
 window.addEventListener("error", (e) => showErr(e.message + (e.lineno ? " (line " + e.lineno + ")" : "")));
@@ -414,19 +455,23 @@ async function ensureChain(p) {
 }
 
 async function connectWallet() {
-  if (!window.ethereum) return toast("Open Reqo in a wallet browser to connect");
+  if (!eth()) return toast("Open Reqo in a wallet browser to connect");
   try {
-    const p = new ethers.BrowserProvider(window.ethereum);
+    const p = new ethers.BrowserProvider(eth());
     await p.send("eth_requestAccounts", []);
     await ensureChain(p);
-    me = await (new ethers.BrowserProvider(window.ethereum)).getSigner().then((s) => s.getAddress());
+    me = await (new ethers.BrowserProvider(eth())).getSigner().then((s) => s.getAddress());
     $("connectBtn").textContent = short(me);
     await loadWallet();
     if (typeof refreshTrade === "function") refreshTrade().catch(() => {});
     toast("Connected");
   } catch (e) { toast("Connection was not approved"); }
 }
-$("connectBtn").onclick = connectWallet;
+$("connectBtn").onclick = () => {
+  if (walletProviders.length > 1 && !activeEth) return openWalletPicker();
+  if (walletProviders.length === 1 && !activeEth) activeEth = walletProviders[0].provider;
+  connectWallet();
+};
 
 function renderTokens(rows) {
   const box = $("w-tokens");
@@ -486,15 +531,15 @@ $("w-recv").onclick = async () => {
   catch (e) { toast("Copy failed: select the address and copy it"); }
 };
 
-if (window.ethereum) {
+if (eth()) {
   try {
-    window.ethereum.request({ method: "eth_accounts" }).then((acc) => {
+    eth().request({ method: "eth_accounts" }).then((acc) => {
       if (acc[0]) { me = acc[0]; $("connectBtn").textContent = short(me); loadWallet(); }
     }).catch(() => {});
   } catch (e) {}
   try {
-    const onFn = window.ethereum.on;
-    if (typeof onFn === "function") onFn.call(window.ethereum, "accountsChanged", (acc) => {
+    const onFn = eth().on;
+    if (typeof onFn === "function") onFn.call(eth(), "accountsChanged", (acc) => {
       me = acc[0] || null;
       $("connectBtn").textContent = me ? short(me) : "Connect wallet";
       loadWallet();
@@ -531,11 +576,11 @@ async function fetchWindow(addr) {
   return j;
 }
 async function getSigner() {
-  if (!window.ethereum) throw new Error("Open Reqo in a wallet browser");
-  let p = new ethers.BrowserProvider(window.ethereum);
+  if (!eth()) throw new Error("Open Reqo in a wallet browser");
+  let p = new ethers.BrowserProvider(eth());
   await p.send("eth_requestAccounts", []);
   await ensureChain(p);
-  p = new ethers.BrowserProvider(window.ethereum);
+  p = new ethers.BrowserProvider(eth());
   return p.getSigner();
 }
 function hlink(h) {
@@ -581,6 +626,7 @@ async function readiness() {
   return { ok: open && enough, text: "Account " + qorAddress(me) + ": " + (winErr ? "could not check the window (" + winErr + "). Try again in a moment." : open ? "window open." : "no open window for this account. Open the window in QoreX for this account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
 }
 
+$("dlg-wallet-close").onclick = () => $("dlg-wallet").close();
 $("l-review").onclick = async () => {
   if (!me) return toast("Connect your wallet first");
   const enc = new TextEncoder();
