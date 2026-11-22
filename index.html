@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.9.0 design wired: wallet picker (EIP-6963) -->
+<!-- version: v4.10.0 design wired: Reqo AI chat, activity log -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -209,10 +209,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
     <div class="card">
       <h2>Activity</h2>
-      <div class="note" style="margin-top:4px">Live history is connected in a later step.</div>
-      <div class="hist-tabs" style="margin-top:10px">
-        <button class="chip on">All</button><button class="chip">Sent</button><button class="chip">Received</button><button class="chip">Trades</button><button class="chip">Launches</button>
-      </div>
+      <div id="act-list" class="muted" style="margin-top:6px">Transactions you make in Reqo appear here.</div>
+      <div class="hist-tabs" style="margin-top:10px" id="act-filters"><button class="chip on" data-f="all">All</button><button class="chip" data-f="sent">Sent</button><button class="chip" data-f="trades">Trades</button><button class="chip" data-f="launch">Launches</button></div>
                             </div>
   </section>
 
@@ -407,24 +405,70 @@ function addMsg(role, text, imgSrc) {
   chat.append(d);
   chat.scrollTop = chat.scrollHeight;
 }
-let pendingImage = null;
-$("ai-file").onchange = () => {
+let aiHistory = [];
+const AGENT_URL = "/api/agent";
+async function uploadImageFile(f) {
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType: f.type, data: btoa(bin) }) });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "image upload failed");
+  return j.url;
+}
+$("ai-file").onchange = async () => {
   const f = $("ai-file").files[0];
   if (!f) return;
+  if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) return toast("Use a PNG, JPEG, or WebP image");
   if (f.size > 1024 * 1024) { toast("Image must be under 1 MB"); $("ai-file").value = ""; return; }
-  pendingImage = URL.createObjectURL(f);
-  $("ai-thumb").src = pendingImage;
-  $("ai-attach-name").textContent = f.name;
+  $("ai-thumb").src = URL.createObjectURL(f);
   $("ai-attach").hidden = false;
+  $("ai-attach-name").textContent = "Uploading...";
+  try {
+    launchImageUrl = await uploadImageFile(f);
+    updateDescLimit();
+    $("ai-attach-name").textContent = f.name + " will be used as your token image";
+  } catch (e) { launchImageUrl = null; $("ai-attach-name").textContent = "Upload failed: " + errText(e); }
 };
-$("ai-remove").onclick = () => { pendingImage = null; $("ai-file").value = ""; $("ai-attach").hidden = true; };
-function sendAI() {
+$("ai-remove").onclick = () => { launchImageUrl = null; $("ai-file").value = ""; $("ai-attach").hidden = true; updateDescLimit(); };
+
+function applyDraft(d) {
+  $("l-name").value = d.name;
+  $("l-symbol").value = d.symbol;
+  $("l-supply").value = d.supply;
+  $("l-desc").value = d.description;
+  updateDescLimit();
+  const box = document.createElement("div");
+  box.className = "msg ai";
+  box.textContent = "I filled in the launch form: " + d.name + " ($" + d.symbol + "). Check it, then sign.";
+  const btn = document.createElement("button");
+  btn.className = "chip on"; btn.textContent = "Open launch review";
+  btn.onclick = () => { show("launch"); $("l-review").click(); };
+  box.append(document.createElement("br"), btn);
+  chat.append(box);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+async function sendAI() {
   const text = $("ai-input").value.trim();
-  if (!text && !pendingImage) return;
-  addMsg("user", text, pendingImage);
+  if (!text) return;
   $("ai-input").value = "";
-  pendingImage = null; $("ai-file").value = ""; $("ai-attach").hidden = true;
-  setTimeout(() => addMsg("ai", "Reqo AI is not connected yet. In the next step this chat will help you fill in your token details."), 400);
+  addMsg("user", text);
+  aiHistory.push({ role: "user", content: text });
+  const wait = document.createElement("div");
+  wait.className = "msg ai"; wait.textContent = "Thinking...";
+  chat.append(wait); chat.scrollTop = chat.scrollHeight;
+  $("ai-send").disabled = true;
+  try {
+    const r = await fetch(AGENT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: aiHistory }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || ("agent error " + r.status));
+    wait.remove();
+    const reply = j.reply || "";
+    if (reply) { addMsg("ai", reply); aiHistory.push({ role: "assistant", content: reply }); }
+    if (j.draft) applyDraft(j.draft);
+  } catch (e) {
+    wait.textContent = "Reqo AI could not answer: " + errText(e);
+  } finally { $("ai-send").disabled = false; }
 }
 $("ai-send").onclick = sendAI;
 $("ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendAI(); });
@@ -494,6 +538,7 @@ function renderTokens(rows) {
 }
 
 async function loadWallet() {
+  renderActivity();
   if (!me) {
     $("w-total").textContent = "0.00 QOR";
     $("w-addr").textContent = "Connect your wallet to see your balances";
@@ -692,6 +737,7 @@ $("dlg-sign").onclick = async () => {
     for (const log of rc.logs) { try { const ev = fac.interface.parseLog(log); if (ev && ev.name === "TokenCreated") { token = ev.args.token; pool = ev.args.pool; } } catch (e) {} }
     s3.textContent = "3. Create confirmed. "; s3.append(hlink(tx.hash));
     $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
+    logActivity({ kind: "launch", title: "Launched " + launchDraft.name + " ($" + launchDraft.symbol + ")", detail: Number(launchDraft.supply).toLocaleString() + " supply", hash: tx.hash });
     launchDraft = null; launchImageUrl = null;
     setProgress(null); loadDashboard().catch(() => {}); loadTradeTokens().catch(() => {});
     ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
@@ -733,6 +779,7 @@ $("snd-go").onclick = async () => {
     out.textContent = "Submitted: "; out.append(hlink(tx.hash));
     await tx.wait();
     out.textContent = "Sent " + sAmt + " " + a.sym + ": "; out.append(hlink(tx.hash));
+    logActivity({ kind: "sent", title: "Sent " + a.sym, detail: sAmt + " to " + short(to), hash: tx.hash });
     $("snd-amt").value = "";
     await loadWallet();
   } catch (e) { out.textContent = "Stopped: " + errText(e); }
@@ -918,6 +965,7 @@ $("t-go").onclick = async () => {
       }
     }
     tradeStatus((buy ? "Bought " : "Sold ") + "$" + t.sym + ". Confirmed:", tx.hash);
+    logActivity({ kind: "trade", title: (buy ? "Bought $" : "Sold $") + t.sym, detail: sAmt + (buy ? " QOR" : " $" + t.sym), hash: tx.hash });
     $("t-amount").value = "";
     await loadWallet();
   } catch (e) { tradeStatus("Stopped: " + errText(e)); }
@@ -991,6 +1039,46 @@ async function loadDashboard() {
 $("d-refresh").onclick = () => { $("d-list").textContent = "Loading tokens..."; loadDashboard(); };
 loadDashboard();
 setInterval(() => { loadDashboard().catch(() => {}); }, 60000);
+
+// ---- Activity: transactions made in Reqo, recorded on this device per wallet ----
+let actFilter = "all";
+function actKey() { return me ? "reqo-activity-" + me.toLowerCase() : null; }
+function logActivity(entry) {
+  const k = actKey(); if (!k) return;
+  let list = [];
+  try { list = JSON.parse(localStorage.getItem(k)) || []; } catch (e) {}
+  list.unshift({ ...entry, at: Date.now() });
+  try { localStorage.setItem(k, JSON.stringify(list.slice(0, 200))); } catch (e) {}
+  renderActivity();
+}
+function renderActivity() {
+  const box = $("act-list"); if (!box) return;
+  const k = actKey();
+  let list = [];
+  if (k) { try { list = JSON.parse(localStorage.getItem(k)) || []; } catch (e) {} }
+  const shown = list.filter((x) => actFilter === "all" || (actFilter === "sent" && x.kind === "sent") || (actFilter === "trades" && x.kind === "trade") || (actFilter === "launch" && x.kind === "launch"));
+  if (!me) { box.textContent = "Connect your wallet to see your activity."; return; }
+  if (!shown.length) { box.textContent = list.length ? "Nothing in this filter yet." : "Transactions you make in Reqo appear here."; return; }
+  box.textContent = "";
+  for (const x of shown) {
+    const row = document.createElement("div");
+    row.className = "hrow";
+    const av = document.createElement("div"); av.className = "avatar sm"; av.textContent = x.kind === "sent" ? "\u2191" : x.kind === "launch" ? "L" : "T";
+    const meta = document.createElement("div"); meta.className = "tok-meta";
+    const t1 = document.createElement("div"); t1.className = "tok-name"; t1.textContent = x.title;
+    const t2 = document.createElement("div"); t2.className = "tok-sub"; t2.textContent = x.detail + " \u00b7 " + new Date(x.at).toLocaleString();
+    const t3 = document.createElement("div"); t3.style.fontSize = "12px"; t3.style.wordBreak = "break-all"; t3.append(hlink(x.hash));
+    meta.append(t1, t2, t3);
+    const badge = document.createElement("span"); badge.className = "badge good"; badge.textContent = "Confirmed";
+    row.append(av, meta, badge);
+    box.append(row);
+  }
+}
+document.querySelectorAll("#act-filters .chip").forEach((c) => c.onclick = () => {
+  actFilter = c.dataset.f;
+  document.querySelectorAll("#act-filters .chip").forEach((x) => x.classList.toggle("on", x === c));
+  renderActivity();
+});
 </script>
 </body>
 </html>
