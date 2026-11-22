@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.7.3 design wired: steps 1 to 4, token tiles -->
+<!-- version: v4.7.4 design wired: steps 1 to 4, account shown in window checks -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -575,7 +575,7 @@ async function readiness() {
   let win = null; try { win = await fetchWindow(me); } catch (e) {}
   const open = !!(win && win.live);
   const enough = qor >= ethers.parseEther("10.5");
-  return { ok: open && enough, text: (open ? "Window open." : "Window closed: open one in QoreX first.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
+  return { ok: open && enough, text: "Checking account " + qorAddress(me) + ": " + (open ? "window open." : "no open window found for this address. Open the window in QoreX for the same account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
 }
 
 $("l-review").onclick = async () => {
@@ -679,7 +679,7 @@ $("snd-go").onclick = async () => {
     if (amt > a.bal) throw new Error("Insufficient " + a.sym + ": you have " + fmtUnits(a.bal));
     const win = await fetchWindow(me).catch(() => null);
     if (!win) throw new Error("Could not check your window. Try again.");
-    if (!win.live) throw new Error("No open window on your account. Open one in QoreX, then send again.");
+    if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then send again.");
     const signer = await getSigner();
     const tx = a.kind === "native" ? await signer.sendTransaction({ to, value: amt }) : await (new ethers.Contract(a.addr, WQ_FULL, signer)).transfer(to, amt);
     out.textContent = "Submitted: "; out.append(hlink(tx.hash));
@@ -815,7 +815,7 @@ $("t-go").onclick = async () => {
     if (have !== null && amountIn > have) throw new Error("Insufficient balance");
     const win = await fetchWindow(me).catch(() => null);
     if (!win) throw new Error("Could not check your window. Try again.");
-    if (!win.live) throw new Error("No open window on your account. Open one in QoreX, then trade again.");
+    if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
     const signer = await getSigner();
     const trader = await signer.getAddress();
     const pool = t.pool;
