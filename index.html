@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.7.0 design wired: steps 1 to 4 -->
+<!-- version: v4.7.3 design wired: steps 1 to 4, token tiles -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -106,7 +106,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <header>
     <img src="logo.png" alt="Reqo">
     <div class="brand">REQO</div>
-    <span class="badge" id="build">v4.7.0 loading</span>
     <div class="sp"></div>
     <button class="icon-btn" id="themeBtn" title="Theme" aria-label="Toggle theme"></button>
     <button class="pill" id="connectBtn">Connect wallet</button>
@@ -303,7 +302,7 @@ const views = ["launch", "trade", "dashboard", "wallet", "ai"];
 function show(name) {
   views.forEach((v) => { $("view-" + v).hidden = v !== name; });
   document.querySelectorAll("nav.bottom button").forEach((b) => b.classList.toggle("on", b.dataset.view === name));
-  history.replaceState(null, "", "#" + name);
+  try { history.replaceState(null, "", "#" + name); } catch (e) { /* sandboxed previews block history changes; the tab still switches */ }
   window.scrollTo({ top: 0 });
 }
 document.querySelectorAll("nav.bottom button").forEach((b) => b.onclick = () => show(b.dataset.view));
@@ -435,10 +434,7 @@ function renderTokens(rows) {
   for (const r of rows) {
     const row = document.createElement("div");
     row.className = "tok-row";
-    const av = document.createElement("div"); av.className = "avatar";
-    const letter = r.sym[0] || "?";
-    if (r.img) { const im = document.createElement("img"); im.src = r.img; im.alt = r.sym; im.onerror = () => { im.remove(); av.textContent = letter; }; av.append(im); }
-    else av.textContent = letter;
+    const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, r.sym[0] || "?", r.sym);
     const meta = document.createElement("div"); meta.className = "tok-meta";
     const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.sym;
     const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = r.sub;
@@ -491,14 +487,19 @@ $("w-recv").onclick = async () => {
 };
 
 if (window.ethereum) {
-  window.ethereum.request({ method: "eth_accounts" }).then((acc) => {
-    if (acc[0]) { me = acc[0]; $("connectBtn").textContent = short(me); loadWallet(); }
-  });
-  window.ethereum.on && window.ethereum.on("accountsChanged", (acc) => {
-    me = acc[0] || null;
-    $("connectBtn").textContent = me ? short(me) : "Connect wallet";
-    loadWallet();
-  });
+  try {
+    window.ethereum.request({ method: "eth_accounts" }).then((acc) => {
+      if (acc[0]) { me = acc[0]; $("connectBtn").textContent = short(me); loadWallet(); }
+    }).catch(() => {});
+  } catch (e) {}
+  try {
+    const onFn = window.ethereum.on;
+    if (typeof onFn === "function") onFn.call(window.ethereum, "accountsChanged", (acc) => {
+      me = acc[0] || null;
+      $("connectBtn").textContent = me ? short(me) : "Connect wallet";
+      loadWallet();
+    });
+  } catch (e) { /* some wallet providers wrap this property; balances still load on Connect */ }
 }
 setInterval(() => { if (me) loadWallet(); }, 30000);
 
@@ -691,7 +692,7 @@ $("snd-go").onclick = async () => {
 };
 
 // ---- Step 3: Trade (user signs a permit and a swap request, then submits swap) ----
-function imgFrom(desc) { const m = /img:(https:\/\/[^\s]+)/.exec(desc || ""); return m ? m[1] : null; }
+function imgFrom(desc) { const m = /img:(https?:\/\/[^\s]+)/.exec(desc || ""); return m ? m[1] : null; }
 function updateDescLimit() {
   const enc = new TextEncoder();
   const link = launchImageUrl ? enc.encode(" img:" + launchImageUrl).length : 0;
@@ -747,7 +748,7 @@ async function refreshTrade() {
   const pc = new ethers.Contract(t.pool, POOL_ABI, reader);
   const [tr, wr] = await Promise.all([pc.tokenReserve(), pc.wqorReserve()]);
   $("p-title").textContent = t.name + " ($" + t.sym + ")";
-  setAvatar($("p-logo"), t.img, t.sym[0]);
+  setAvatar($("p-logo"), t.img, t.sym[0], t.sym);
   $("p-tok").textContent = fmtUnits(tr); $("p-wq").textContent = fmtUnits(wr);
   $("p-price").textContent = tr > 0n ? fmtUnits(wr * 10n ** 18n / tr) + " WQOR" : "-";
   if (me) {
@@ -849,14 +850,20 @@ setInterval(() => { if (tradeTokens.length && !tradeBusy) refreshTrade().catch((
 updateDescLimit();
 
 // ---- Step 4: Dashboard (live from the factory) ----
-function setAvatar(el, img, letter) {
+function tileColor(seed) {
+  let h = 0; for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return "hsl(" + (h % 360) + " 70% 45%)";
+}
+function setAvatar(el, img, letter, seed) {
   el.textContent = "";
-  if (img) { const im = document.createElement("img"); im.src = img; im.alt = ""; im.referrerPolicy = "no-referrer"; im.onerror = () => { im.remove(); el.textContent = letter || "?"; }; el.append(im); }
+  el.style.background = img ? "" : tileColor(seed || letter || "?");
+  el.style.color = img ? "" : "#fff";
+  if (img) { const im = document.createElement("img"); im.src = img; im.alt = ""; im.referrerPolicy = "no-referrer"; im.onerror = () => { im.remove(); el.style.background = tileColor(seed || letter); el.style.color = "#fff"; el.textContent = letter || "?"; }; el.append(im); }
   else el.textContent = letter || "?";
 }
 function tokenRow(r, onClick) {
   const row = document.createElement("div"); row.className = "tok-row"; row.style.cursor = onClick ? "pointer" : "default";
-  const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, (r.symbol || "?")[0]);
+  const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, (r.symbol || "?")[0], r.symbol);
   const meta = document.createElement("div"); meta.className = "tok-meta";
   const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.name + " ";
   const tk = document.createElement("span"); tk.className = "badge"; tk.textContent = "$" + r.symbol; nm.append(tk);
@@ -905,7 +912,6 @@ async function loadDashboard() {
 $("d-refresh").onclick = () => { $("d-list").textContent = "Loading tokens..."; loadDashboard(); };
 loadDashboard();
 setInterval(() => { loadDashboard().catch(() => {}); }, 60000);
-$("build").textContent = "v4.7.0";
 </script>
 </body>
 </html>
