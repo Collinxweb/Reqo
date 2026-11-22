@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.7.5 design wired: steps 1 to 4, window checks through /api/window -->
+<!-- version: v4.8.0 design wired: trade in QOR (auto wrap and unwrap) -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -165,10 +165,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
         <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
         <div class="lbl">Token</div>
         <select class="field" id="t-token"><option>Loading tokens...</option></select>
-        <div class="lbl" id="t-from-lbl">You pay (WQOR)</div>
+        <div class="lbl" id="t-from-lbl">You pay (QOR)</div>
         <div class="row"><input class="field" id="t-amount" inputmode="decimal" placeholder="0.0"><button class="chip" id="t-max">Max</button></div>
         <div class="small muted" style="margin-top:6px">Balance: <span id="t-bal">-</span></div>
-        <div class="lbl">You receive (estimate)</div>
+        <div class="lbl" id="t-recv-lbl">You receive (estimate)</div>
         <div class="field" id="t-out" style="display:flex;align-items:center;min-height:50px">0.0</div>
         <div class="small muted" id="t-min" style="margin-top:6px"></div>
         <div class="lbl">Max slippage</div>
@@ -548,7 +548,7 @@ function hlink(h) {
 function errText(e) { return (e && e.info && e.info.error && e.info.error.message) || (e && e.shortMessage) || (e && e.message) || String(e); }
 
 const SEED = ethers.parseEther("10");
-const WQ_FULL = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function deposit() payable", "function approve(address,uint256) returns (bool)", "function transfer(address,uint256) returns (bool)"];
+const WQ_FULL = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function deposit() payable", "function approve(address,uint256) returns (bool)", "function transfer(address,uint256) returns (bool)", "function withdraw(uint256)"];
 const FAC_FULL = ["function createToken(string,string,uint256,string) returns (address)", "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)"];
 let launchImageUrl = null, launchDraft = null;
 
@@ -718,7 +718,13 @@ const POOL_ABI = [
 const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)"];
 const INTENT_TYPES = { Swap: [{ name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
 const PERMIT_TYPES = { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
-let tradeTokens = [], tradeSide = "buy", slipPct = 3, tradeBusy = false, tradeBal = { wqor: null, tok: null };
+let tradeTokens = [], tradeSide = "buy", slipPct = 3, tradeBusy = false, tradeBal = { wqor: null, tok: null, qor: null };
+const GAS_RESERVE = ethers.parseEther("0.2");
+// What the user can spend when buying: QOR plus WQOR they already hold, keeping gas aside.
+function availableFor(buy) {
+  if (buy) return tradeBal.wqor === null ? null : tradeBal.wqor + tradeBal.qor - GAS_RESERVE;
+  return tradeBal.tok;
+}
 const curToken = () => tradeTokens[Number($("t-token").value)];
 function tradeStatus(text, hash) {
   const el = $("t-status"); el.textContent = text;
@@ -755,11 +761,14 @@ async function refreshTrade() {
   $("p-price").textContent = tr > 0n ? fmtUnits(wr * 10n ** 18n / tr) + " WQOR" : "-";
   if (me) {
     const [wb, tb] = await Promise.all([new ethers.Contract(WQOR, PERMIT_ABI, reader).balanceOf(me), new ethers.Contract(t.addr, PERMIT_ABI, reader).balanceOf(me)]);
-    tradeBal = { wqor: wb, tok: tb };
+    const qb = await reader.getBalance(me);
+    tradeBal = { wqor: wb, tok: tb, qor: qb };
     $("p-bal").textContent = fmtUnits(tb) + " " + t.sym;
-    $("t-bal").textContent = tradeSide === "buy" ? fmtUnits(wb) + " WQOR" : fmtUnits(tb) + " " + t.sym;
-  } else { tradeBal = { wqor: null, tok: null }; $("p-bal").textContent = "-"; $("t-bal").textContent = "-"; }
-  $("t-from-lbl").textContent = tradeSide === "buy" ? "You pay (WQOR)" : "You pay ($" + t.sym + ")";
+    const avail = tradeSide === "buy" ? (wb + qb > GAS_RESERVE ? wb + qb - GAS_RESERVE : 0n) : tb;
+    $("t-bal").textContent = tradeSide === "buy" ? fmtUnits(avail) + " QOR" : fmtUnits(tb) + " " + t.sym;
+  } else { tradeBal = { wqor: null, tok: null, qor: null }; $("p-bal").textContent = "-"; $("t-bal").textContent = "-"; }
+  $("t-from-lbl").textContent = tradeSide === "buy" ? "You pay (QOR)" : "You pay ($" + t.sym + ")";
+  $("t-recv-lbl").textContent = tradeSide === "buy" ? "You receive ($" + t.sym + ")" : "You receive (QOR)";
   await tradeQuote();
 }
 
@@ -774,11 +783,11 @@ async function tradeQuote() {
   try {
     const out = await new ethers.Contract(t.pool, POOL_ABI, reader).quoteOut(buy, amountIn);
     const min = out * BigInt(100 - slipPct) / 100n;
-    const unit = buy ? t.sym : "WQOR";
+    const unit = buy ? t.sym : "QOR";
     $("t-out").textContent = fmtUnits(out) + " " + unit;
     $("t-min").textContent = "Minimum you receive: " + fmtUnits(min) + " " + unit + " (" + slipPct + "% max slippage). Fee 0.3%.";
   } catch (e) { $("t-out").textContent = "Could not quote"; go.disabled = true; return; }
-  const have = buy ? tradeBal.wqor : tradeBal.tok;
+  const have = availableFor(buy);
   if (!me) { go.disabled = false; go.textContent = "Connect wallet"; return; }
   if (have !== null && amountIn > have) { go.disabled = true; go.textContent = "Insufficient balance"; return; }
   go.disabled = false; go.textContent = buy ? "Buy" : "Sell";
@@ -796,7 +805,7 @@ $("t-sell").onclick = () => setTradeSide("sell");
 $("t-token").onchange = () => { $("t-amount").value = ""; refreshTrade().catch(() => {}); };
 $("t-amount").oninput = () => tradeQuote().catch(() => {});
 $("t-max").onclick = () => {
-  const have = tradeSide === "buy" ? tradeBal.wqor : tradeBal.tok;
+  const have = availableFor(tradeSide === "buy");
   if (have === null) return toast("Connect your wallet first");
   $("t-amount").value = ethers.formatUnits(have, 18);
   tradeQuote().catch(() => {});
@@ -813,13 +822,27 @@ $("t-go").onclick = async () => {
     if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
     const amountIn = ethers.parseUnits(sAmt, 18);
     const buy = tradeSide === "buy";
-    const have = buy ? tradeBal.wqor : tradeBal.tok;
+    const have = availableFor(buy);
     if (have !== null && amountIn > have) throw new Error("Insufficient balance");
     const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
     if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
     const signer = await getSigner();
     const trader = await signer.getAddress();
     const pool = t.pool;
+    if (buy) {
+      const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
+      const wqBal = await wq.balanceOf(trader);
+      if (wqBal < amountIn) {
+        const need = amountIn - wqBal;
+        const qorBal = await reader.getBalance(trader);
+        if (qorBal < need + GAS_RESERVE) throw new Error("Not enough QOR: you need " + fmtUnits(need + GAS_RESERVE) + " QOR including gas.");
+        tradeStatus("Wrap " + fmtUnits(need) + " QOR into WQOR. Confirm in your wallet.");
+        const wtx = await wq.deposit({ value: need });
+        await wtx.wait();
+        tradeStatus("Wrapped " + fmtUnits(need) + " QOR.", wtx.hash);
+      }
+    }
+    const wqBefore = await new ethers.Contract(WQOR, WQ_FULL, reader).balanceOf(trader);
     const inTok = buy ? WQOR : t.addr;
     const quote = await new ethers.Contract(pool, POOL_ABI, reader).quoteOut(buy, amountIn);
     const minOut = quote * BigInt(100 - slipPct) / 100n;
@@ -839,6 +862,15 @@ $("t-go").onclick = async () => {
     const tx = await new ethers.Contract(pool, POOL_ABI, signer).swap(intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s);
     tradeStatus("Submitted:", tx.hash);
     await tx.wait();
+    if (!buy) {
+      const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
+      const got = (await wq.balanceOf(trader)) - wqBefore;
+      if (got > 0n) {
+        tradeStatus("Convert " + fmtUnits(got) + " WQOR back to QOR. Confirm in your wallet.");
+        const utx = await wq.withdraw(got);
+        await utx.wait();
+      }
+    }
     tradeStatus((buy ? "Bought " : "Sold ") + "$" + t.sym + ". Confirmed:", tx.hash);
     $("t-amount").value = "";
     await loadWallet();
