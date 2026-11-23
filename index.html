@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.12.2 design wired: fixed Launch markup -->
+<!-- version: v4.13.0 design wired: QoreX-native qor1, QoreX window flow, registration status -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -197,6 +197,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       <div class="muted small">Total balance</div>
       <div class="bal" id="w-total">0.00 QOR</div>
       <div class="muted small" id="w-addr">Connect your wallet to see your balances</div>
+      <div class="muted small" id="w-reg" style="margin-top:4px"></div>
       <div class="actions2">
         <button class="btn" style="margin:0" id="w-send">Send</button>
         <button class="btn ghost" style="margin:0" id="w-recv">Receive</button>
@@ -541,6 +542,8 @@ async function connectWallet() {
     catch (e) { chainNote = " The wallet is not on QoreChain Diana (9800). In QoreX, choose QoreChain Diana Testnet, then reconnect before trading."; }
     step = "reading the account";
     me = await (new ethers.BrowserProvider(provider)).getSigner().then((x) => x.getAddress());
+    qorNative = null;
+    try { if (provider.isQoreX && window.qorex) { const k = await window.qorex.native.getKey("qorechain-diana"); qorNative = k.bech32Address || null; } } catch (e) {}
     $("connectBtn").textContent = short(me);
     await loadWallet();
     if (typeof refreshTrade === "function") refreshTrade().catch(() => {});
@@ -576,6 +579,19 @@ function renderTokens(rows) {
   }
 }
 
+async function loadRegistration() {
+  const el = $("w-reg");
+  if (!me) { el.textContent = ""; return; }
+  el.textContent = "Checking registration...";
+  try {
+    const r = await fetch("/api/account?qor=" + qorAddress(me));
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { el.textContent = "Registration status unavailable right now."; return; }
+    el.textContent = j.found
+      ? "Quantum-safe key registered (" + (j.key_type || "hybrid") + "). Trades and sends are protected."
+      : "No key registered yet. Your first QoreX transaction registers it.";
+  } catch (e) { el.textContent = "Registration status unavailable right now."; }
+}
 async function loadWallet() {
   renderActivity();
   if (!me) {
@@ -587,6 +603,7 @@ async function loadWallet() {
   }
   try {
     $("w-addr").textContent = me;
+    loadRegistration();
     const qor = await reader.getBalance(me);
     const rows = [{ sym: "QOR", kind: "native", sub: "Native · QoreChain", bal: qor, tag: "Native" }];
     const w = new ethers.Contract(WQOR, ERC20, reader);
@@ -625,6 +642,7 @@ if (eth()) {
     const onFn = eth().on;
     if (typeof onFn === "function") onFn.call(eth(), "accountsChanged", (acc) => {
       me = acc[0] || null;
+      qorNative = null;
       $("connectBtn").textContent = me ? short(me) : "Connect wallet";
       loadWallet();
     });
@@ -641,7 +659,9 @@ function bchPolymod(values) {
   for (const v of values) { const b = chk >>> 25; chk = ((chk & 0x1ffffff) << 5) ^ v; for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= G[i]; }
   return chk;
 }
+let qorNative = null; // QoreX's own qor1 address, read from window.qorex.native
 function qorAddress(evm) {
+  if (qorNative && me && evm.toLowerCase() === me.toLowerCase()) return qorNative;
   const bytes = (evm.slice(2).match(/../g) || []).map((x) => parseInt(x, 16));
   const data = []; let acc = 0, bits = 0;
   for (const v of bytes) { acc = ((acc << 8) | v) & 0xffff; bits += 8; while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); } }
@@ -701,13 +721,15 @@ $("l-file").addEventListener("change", async () => {
   } catch (e) { $("l-hint").textContent = "Upload failed"; toast("Image upload failed: " + errText(e)); }
 });
 
+function isQoreXWallet() { const p = eth(); return !!(p && p.isQoreX); }
 async function readiness() {
   const qor = await reader.getBalance(me);
+  const viaQoreX = isQoreXWallet();
   let win = null, winErr = null;
-  try { win = await fetchWindow(me); } catch (e) { winErr = e.message || String(e); }
-  const open = !!(win && win.live);
+  if (!viaQoreX) { try { win = await fetchWindow(me); } catch (e) { winErr = e.message || String(e); } }
+  const open = viaQoreX || !!(win && win.live);
   const enough = qor >= ethers.parseEther("10.5");
-  return { ok: open && enough, text: "Account " + qorAddress(me) + ": " + (winErr ? "could not check the window (" + winErr + "). Try again in a moment." : open ? "window open." : "no open window for this account. Open the window in QoreX for this account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
+  return { ok: open && enough, text: "Account " + qorAddress(me) + ": " + (winErr ? "could not check the window (" + winErr + "). Try again in a moment." : viaQoreX ? "QoreX opens the window inside its approval." : open ? "window open." : "no open window for this account. Open the window in QoreX for this account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
 }
 
 $("dlg-wallet-close").onclick = () => $("dlg-wallet").close();
@@ -811,8 +833,10 @@ $("snd-go").onclick = async () => {
     if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
     const amt = ethers.parseUnits(sAmt, 18);
     if (amt > a.bal) throw new Error("Insufficient " + a.sym + ": you have " + fmtUnits(a.bal));
-    const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
-    if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then send again.");
+    if (!isQoreXWallet()) {
+      const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
+      if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then send again.");
+    }
     const signer = await getSigner();
     const tx = a.kind === "native" ? await signer.sendTransaction({ to, value: amt }) : await (new ethers.Contract(a.addr, WQ_FULL, signer)).transfer(to, amt);
     out.textContent = "Submitted: "; out.append(hlink(tx.hash));
@@ -958,8 +982,10 @@ $("t-go").onclick = async () => {
     const buy = tradeSide === "buy";
     const have = availableFor(buy);
     if (have !== null && amountIn > have) throw new Error("Insufficient balance");
-    const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
-    if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
+    if (!isQoreXWallet()) {
+      const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
+      if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
+    }
     const signer = await getSigner();
     const trader = await signer.getAddress();
     const pool = t.pool;
