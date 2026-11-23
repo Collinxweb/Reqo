@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.11.0 design wired: Reqo AI drafts, trades, suggestions, image note -->
+<!-- version: v4.12.0 design wired: trade signature checks -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -842,6 +842,8 @@ const POOL_ABI = [
   "function tokenReserve() view returns (uint256)",
   "function wqorReserve() view returns (uint256)",
   "function quoteOut(bool buy, uint256 amountIn) view returns (uint256)",
+  "function hashIntent((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s) view returns (bytes32)",
+  "function eip712Domain() view returns (bytes1, string, string, uint256, address, bytes32, uint256[])",
   "function swap((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 sv) returns (uint256)",
 ];
 const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)"];
@@ -986,7 +988,18 @@ $("t-go").onclick = async () => {
       { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES,
       { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline }));
     tradeStatus("2 of 3: sign the trade request in your wallet (no gas).");
-    const intentSig = await signer.signTypedData({ name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool }, INTENT_TYPES, intent);
+    const poolDomain = { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool };
+    const intentSig = await signer.signTypedData(poolDomain, INTENT_TYPES, intent);
+    // Check 1: the contract and this page hash the trade the same way.
+    const localHash = ethers.TypedDataEncoder.hash(poolDomain, INTENT_TYPES, intent);
+    const onChainHash = await poolC.hashIntent(intent);
+    if (localHash !== onChainHash) throw new Error("the trade hash differs from the pool's (" + localHash.slice(0, 10) + " vs " + onChainHash.slice(0, 10) + "). The wallet encoded the trade differently.");
+    // Check 2: the signature must come from the trader.
+    const signedBy = ethers.verifyTypedData(poolDomain, INTENT_TYPES, intent, intentSig);
+    if (signedBy.toLowerCase() !== trader.toLowerCase()) throw new Error("the wallet signed the trade as " + short(signedBy) + ", not " + short(trader) + ". The wallet's typed-data signing does not match the pool.");
+    // Check 3: the pool's on-chain domain must match the one signed.
+    const dom = await poolC.eip712Domain();
+    if (dom[1] !== "Reqo Pool" || dom[2] !== "1" || Number(dom[3]) !== CHAIN_ID || dom[4].toLowerCase() !== pool.toLowerCase()) throw new Error("the pool's signing domain is " + dom[1] + " v" + dom[2] + " on chain " + dom[3] + ", not the one this page signs.");
     tradeStatus("3 of 3: confirm the transaction in your wallet.");
     const tx = await new ethers.Contract(pool, POOL_ABI, signer).swap(intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s);
     tradeStatus("Submitted:", tx.hash);
