@@ -121,7 +121,8 @@ contract ReqoV3Test is Test {
         (, PoolV3 p) = _launch();
         uint256 out = p.quoteOut(true, 1e18);
         // without the fee the output would be larger: 1000e18 * 1e18 / (10e18 + 1e18)
-        assertLt(out, (1000e18 * 1e18) / 11e18);
+        uint256 noFee = (1000e18 * uint256(1e18)) / 11e18;
+        assertLt(out, noFee);
     }
 
     // ---------- trading ----------
