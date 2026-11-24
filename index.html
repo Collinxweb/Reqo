@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.13.0 design wired: QoreX-native qor1, QoreX window flow, registration status -->
+<!-- version: v4.14.0 design wired: Reqo AI check, picture warning -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -261,8 +261,10 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   <div class="dlg-title">Review your launch</div>
   <dl class="dl" id="dlg-fields"></dl>
   <div class="small muted" id="dlg-ready" style="margin-top:10px"></div>
+  <div id="dlg-check" style="margin-top:8px"></div>
   <div id="dlg-steps" style="margin-top:8px"></div>
   <div class="small" id="dlg-result" style="margin-top:8px;word-break:break-all"></div>
+  <label class="small" id="dlg-noimg-wrap" hidden style="display:block;margin-top:8px"><input type="checkbox" id="dlg-noimg"> I understand this token launches without a picture</label>
   <button class="btn" id="dlg-sign">Sign and create</button>
   <button class="btn ghost" id="dlg-close">Close</button>
   <div class="note">Three transactions, each confirmed in your wallet: wrap 10 QOR into WQOR, approve the factory for 10 WQOR, then create the token.</div>
@@ -450,12 +452,19 @@ async function applyTrade(tr) {
   addMsg("ai", "Trade ready: " + (tr.side === "sell" ? "sell " + tr.amount + " $" + t.sym + " for QOR" : "buy $" + t.sym + " with " + tr.amount + " QOR") + ". Check the quote on the Trade tab, then tap " + (tr.side === "sell" ? "Sell" : "Buy") + ". Your wallet will ask you to confirm.");
 }
 
-function applyDraft(d) {
+async function applyDraft(d) {
   $("l-name").value = d.name;
   $("l-symbol").value = d.symbol;
   $("l-supply").value = d.supply;
   $("l-desc").value = d.description;
   updateDescLimit();
+  const res = await checkDraft(d.name, d.symbol, d.supply, d.description, launchImageUrl);
+  const cm = document.createElement("div");
+  cm.className = "msg ai";
+  cm.append("Reqo AI check");
+  cm.append(checkBox(res));
+  chat.append(cm);
+  if (!launchImageUrl) addMsg("ai", "No picture is attached. Without one, this token launches without an image. Attach a PNG, JPEG or WebP to add one, or confirm the no-picture option in the review.");
   const box = document.createElement("div");
   box.className = "msg ai";
   box.textContent = "I filled in the launch form: " + d.name + " ($" + d.symbol + "). Check it, then sign.";
@@ -721,6 +730,50 @@ $("l-file").addEventListener("change", async () => {
   } catch (e) { $("l-hint").textContent = "Upload failed"; toast("Image upload failed: " + errText(e)); }
 });
 
+// ---- Reqo AI check: read-only, runs before the review ----
+async function checkDraft(name, symbol, supply, description, img) {
+  const enc = new TextEncoder();
+  const lines = [];
+  let blocking = false;
+  const full = description + (img ? " img:" + img : "");
+  if (!name || enc.encode(name).length > 32) { lines.push(["bad", "Name must be 1 to 32 bytes."]); blocking = true; }
+  else lines.push(["ok", "Name is within the limit."]);
+  if (!/^[A-Za-z0-9]{1,10}$/.test(symbol)) { lines.push(["bad", "Ticker must be 1 to 10 letters or digits."]); blocking = true; }
+  else lines.push(["ok", "Ticker format is valid."]);
+  if (!/^\d+$/.test(supply) || BigInt(supply) < 1n || BigInt(supply) > 1000000000000n) { lines.push(["bad", "Supply must be a whole number from 1 to 1,000,000,000,000."]); blocking = true; }
+  else lines.push(["ok", "Supply is within the limit."]);
+  if (enc.encode(full).length > 280) { lines.push(["bad", "Description plus the image link is over 280 bytes."]); blocking = true; }
+  else lines.push(["ok", "Description fits the 280-byte limit."]);
+  try {
+    if (!tradeTokens.length) await loadTradeTokens();
+    const sameTicker = tradeTokens.find((t) => t.sym.toLowerCase() === symbol.toLowerCase());
+    const sameName = tradeTokens.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    lines.push(sameTicker ? ["warn", "$" + symbol + " is already used by " + sameTicker.name + ". Tickers can repeat, so make sure yours is clearly different."] : ["ok", "$" + symbol + " is not used on Reqo yet."]);
+    lines.push(sameName ? ["warn", "A token named " + name + " already exists on Reqo."] : ["ok", "No token on Reqo has this name."]);
+  } catch (e) { lines.push(["warn", "Could not check existing tokens right now."]); }
+  lines.push(img ? ["ok", "Picture attached: it will be the token image."] : ["warn", "No picture. This token will launch without an image."]);
+  return { lines, blocking };
+}
+function checkBox(res) {
+  const box = document.createElement("div");
+  const color = { ok: "var(--good)", warn: "#e0a800", bad: "var(--bad)" };
+  const mark = { ok: "\u2713 ", warn: "\u26a0 ", bad: "\u2717 " };
+  for (const [kind, text] of res.lines) {
+    const row = document.createElement("div");
+    row.style.cssText = "font-size:13px;padding:3px 0;color:" + color[kind];
+    row.textContent = mark[kind] + text;
+    box.append(row);
+  }
+  return box;
+}
+function renderCheck(target, res) { target.textContent = ""; target.append(checkBox(res)); }
+function updateSignGate() {
+  const c = window.launchCheck || { ok: false, blocking: true };
+  const noImg = !launchImageUrl;
+  $("dlg-sign").disabled = !c.ok || c.blocking || (noImg && !$("dlg-noimg").checked);
+}
+$("dlg-noimg").onchange = updateSignGate;
+
 function isQoreXWallet() { const p = eth(); return !!(p && p.isQoreX); }
 async function readiness() {
   const qor = await reader.getBalance(me);
@@ -758,7 +811,11 @@ $("l-review").onclick = async () => {
   $("dlg-launch").showModal();
   const rd = await readiness();
   $("dlg-ready").textContent = rd.text;
-  $("dlg-sign").disabled = !rd.ok;
+  const chk = await checkDraft(name, symbol, supply, desc, launchImageUrl);
+  renderCheck($("dlg-check"), chk);
+  $("dlg-noimg-wrap").hidden = !!launchImageUrl;
+  window.launchCheck = { ok: rd.ok, blocking: chk.blocking };
+  updateSignGate();
 };
 $("dlg-close").onclick = () => $("dlg-launch").close();
 
