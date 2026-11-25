@@ -13,6 +13,8 @@ PQC_KEY_STATUS=0x0000000000000000000000000000000000000a02
 UNREGISTERED=0x0000000000000000000000000000000000000001
 
 fails=0
+tmp=$(mktemp)
+trap 'rm -f "$tmp"' EXIT
 pass() { echo "PASS  $1"; }
 fail() { echo "FAIL  $1 (got: $2)"; fails=$((fails + 1)); }
 
@@ -31,9 +33,11 @@ if [ "$ks" = "false 0 0x false" ]; then pass "pqcKeyStatus: unregistered account
 # 3. pqcVerify on every official vector must return true
 count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["cases"]))' "$VECTORS")
 for i in $(seq 0 $((count - 1))); do
-  read -r PK SIG MSG < <(python3 -c 'import json,sys
+  # Write the three fields to a file first: reading them through a pipe breaks on large values.
+  python3 -c 'import json,sys
 c = json.load(open(sys.argv[1]))["cases"][int(sys.argv[2])]
-print(c["publicKey"], c["signature"], c["message"])' "$VECTORS" "$i")
+open(sys.argv[3], "w").write(" ".join([c["publicKey"], c["signature"], c["message"]]))' "$VECTORS" "$i" "$tmp"
+  read -r PK SIG MSG < "$tmp"
   r=$(cast call "$PQC_VERIFY" "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$MSG" --rpc-url "$RPC")
   if [ "$r" = "true" ]; then pass "pqcVerify: official vector $i verifies"; else fail "pqcVerify: official vector $i verifies" "$r"; fi
 
