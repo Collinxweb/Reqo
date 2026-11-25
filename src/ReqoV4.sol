@@ -6,22 +6,19 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ReqoV3.sol"; // WQOR, MemeTokenV3 and PoolV3 are unchanged and already deployed
 
-// Key registry at 0x...0A02.
-// UNCONFIRMED: the signature below is a placeholder until QoreChain confirms the real
-// pqcKeyStatus call and its return fields. Do not deploy with this interface unverified.
-interface IPqcKeyStatus {
-    function keyStatus(address account) external view returns (bool possessionProven, bytes32 keyHash);
-}
-
-// Launch gate. A token is created only when the caller's registered ML-DSA-87 key signs
-// the exact request, checked on chain with pqcVerify at 0x...0A01. The check fails closed:
-// a missing precompile, a malformed call, or a false result all revert.
+// Launch gate. A token is created only when the caller's registered ML-DSA-87 key signs the
+// exact request, checked on chain with pqcVerify (0x...0A01). The key itself comes from
+// pqcKeyStatus (0x...0A02). Every failure reverts: the gate fails closed.
 contract MemeFactoryV4 is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    address public constant PQC = 0x0000000000000000000000000000000000000a01;
-    bytes4 public constant PQC_SELECTOR = bytes4(keccak256("pqcVerify(bytes,bytes,bytes)"));
-    // Signed payload prefix from QoreSign message-signing-v1: "qorechain-msg-v1|" + chainId + "|".
+    address public constant PQC_VERIFY = 0x0000000000000000000000000000000000000a01;
+    address public constant PQC_KEY_STATUS = 0x0000000000000000000000000000000000000a02;
+    bytes4 public constant VERIFY_SELECTOR = bytes4(keccak256("pqcVerify(bytes,bytes,bytes)"));
+    bytes4 public constant KEY_SELECTOR = bytes4(keccak256("pqcKeyStatus(address)"));
+    uint8 public constant ALG_ML_DSA_87 = 1;
+
+    // QoreSign message-signing-v1 prefix: "qorechain-msg-v1|" + chainId + "|".
     bytes public constant MSG_PREFIX = "qorechain-msg-v1|qorechain-diana|";
     bytes32 public constant DOMAIN_TAG = keccak256("ReqoV4.createToken");
 
@@ -31,7 +28,6 @@ contract MemeFactoryV4 is ReentrancyGuard {
     uint256 public constant SEED_WQOR = 10e18;
 
     WQOR public immutable wqor;
-    IPqcKeyStatus public immutable keyRegistry;
 
     address[] public tokens;
     mapping(address => address) public creatorOf;
@@ -46,11 +42,10 @@ contract MemeFactoryV4 is ReentrancyGuard {
         string symbol,
         uint256 supply
     );
-    event PqcVerified(address indexed creator, bytes32 digest, bytes32 keyHash);
+    event PqcVerified(address indexed creator, bytes32 digest);
 
-    constructor(address wqor_, address keyRegistry_) {
+    constructor(address wqor_) {
         wqor = WQOR(payable(wqor_));
-        keyRegistry = IPqcKeyStatus(keyRegistry_);
     }
 
     function tokenCount() external view returns (uint256) {
@@ -98,22 +93,35 @@ contract MemeFactoryV4 is ReentrancyGuard {
         require(!nonceUsed[msg.sender][nonce], "nonce used");
         _checkFields(name, symbol, supply, description);
 
-        // The key must be registered to the caller, and the supplied key must be that key.
-        (bool proven, bytes32 keyHash) = keyRegistry.keyStatus(msg.sender);
-        require(proven, "key not proven");
-        require(keyHash == keccak256(pubKey), "key not owned");
+        // The caller must have a registered, possession-proven ML-DSA-87 key, and the
+        // submitted key must be that registered key.
+        (bool registered, uint8 algorithmId, bytes memory registeredKey, bool possessionProven) =
+            _keyStatus(msg.sender);
+        require(registered && algorithmId == ALG_ML_DSA_87 && possessionProven, "key not proven");
+        require(keccak256(registeredKey) == keccak256(pubKey), "key not owned");
 
         bytes memory message = messageFor(msg.sender, nonce, deadline, name, symbol, supply, description);
         require(_pqcVerify(pubKey, signature, message), "pqc: bad signature");
 
         nonceUsed[msg.sender][nonce] = true;
-        emit PqcVerified(msg.sender, keccak256(message), keyHash);
+        emit PqcVerified(msg.sender, keccak256(message));
         return _create(name, symbol, supply, description, msg.sender);
     }
 
-    // staticcall, a 32-byte result, and a decoded bool. Anything else reverts (fail closed).
+    // staticcall to pqcKeyStatus. A failed call or an undecodable result reverts.
+    function _keyStatus(address account)
+        internal
+        view
+        returns (bool registered, uint8 algorithmId, bytes memory pubkey, bool possessionProven)
+    {
+        (bool ok, bytes memory out) = PQC_KEY_STATUS.staticcall(abi.encodeWithSelector(KEY_SELECTOR, account));
+        require(ok, "key status unavailable");
+        (registered, algorithmId, pubkey, possessionProven) = abi.decode(out, (bool, uint8, bytes, bool));
+    }
+
+    // staticcall to pqcVerify. Requires a 32-byte result and decodes it as a bool.
     function _pqcVerify(bytes calldata pk, bytes calldata sig, bytes memory message) internal view returns (bool) {
-        (bool ok, bytes memory out) = PQC.staticcall(abi.encodeWithSelector(PQC_SELECTOR, pk, sig, message));
+        (bool ok, bytes memory out) = PQC_VERIFY.staticcall(abi.encodeWithSelector(VERIFY_SELECTOR, pk, sig, message));
         require(ok && out.length == 32, "pqc unavailable");
         return abi.decode(out, (bool));
     }

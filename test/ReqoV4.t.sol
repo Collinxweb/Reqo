@@ -4,8 +4,8 @@ pragma solidity ^0.8.20;
 import "forge-std/Test.sol";
 import "../src/ReqoV4.sol";
 
-// Mock precompile at 0x...0A01: accepts only a message with the QoreSign prefix, and returns a
-// settable answer. The real precompile is exercised separately by the fork test.
+// Stand-in for pqcVerify at 0x...0A01: accepts only messages with the QoreSign prefix,
+// and returns a settable answer. The real precompile is exercised by the fork test.
 contract MockPqc {
     bool public answer;
 
@@ -23,26 +23,29 @@ contract MockPqc {
     }
 }
 
-// Mock key registry standing in for 0x...0A02 until the real ABI is confirmed.
-contract MockKeyRegistry {
-    mapping(address => bool) public proven;
-    mapping(address => bytes32) public keyHashOf;
+// Stand-in for pqcKeyStatus at 0x...0A02, using the documented return fields.
+contract MockKeyStatus {
+    mapping(address => bool) public registered;
+    mapping(address => bytes) public keyOf;
+    mapping(address => bool) public possession;
 
-    function register(address account, bytes calldata pk) external {
-        proven[account] = true;
-        keyHashOf[account] = keccak256(pk);
+    function setKey(address account, bytes calldata pk, bool proven) external {
+        registered[account] = true;
+        keyOf[account] = pk;
+        possession[account] = proven;
     }
 
-    function keyStatus(address account) external view returns (bool, bytes32) {
-        return (proven[account], keyHashOf[account]);
+    function pqcKeyStatus(address account) external view returns (bool, uint8, bytes memory, bool) {
+        if (!registered[account]) return (false, 0, "", false);
+        return (true, 1, keyOf[account], possession[account]);
     }
 }
 
 contract ReqoV4Test is Test {
-    address internal constant PQC = 0x0000000000000000000000000000000000000a01;
+    address internal constant PQC_VERIFY = 0x0000000000000000000000000000000000000a01;
+    address internal constant PQC_KEY_STATUS = 0x0000000000000000000000000000000000000a02;
 
     WQOR internal wqor;
-    MockKeyRegistry internal registry;
     MemeFactoryV4 internal fac;
 
     address internal creator = makeAddr("creator");
@@ -52,23 +55,24 @@ contract ReqoV4Test is Test {
     function setUp() public {
         vm.warp(1000);
         wqor = new WQOR();
-        registry = new MockKeyRegistry();
-        fac = new MemeFactoryV4(address(wqor), address(registry));
+        fac = new MemeFactoryV4(address(wqor));
 
-        vm.etch(PQC, type(MockPqc).runtimeCode);
-        MockPqc(PQC).setAnswer(true);
+        vm.etch(PQC_VERIFY, type(MockPqc).runtimeCode);
+        MockPqc(PQC_VERIFY).setAnswer(true);
+        vm.etch(PQC_KEY_STATUS, type(MockKeyStatus).runtimeCode);
+        MockKeyStatus(PQC_KEY_STATUS).setKey(creator, pk, true);
 
         vm.deal(creator, 100 ether);
         vm.startPrank(creator);
         wqor.deposit{value: 50 ether}();
         wqor.approve(address(fac), type(uint256).max);
         vm.stopPrank();
-
-        vm.prank(creator);
-        registry.register(creator, pk);
     }
 
-    function _create(uint256 nonce, uint256 deadline, string memory name, string memory symbol) internal returns (address) {
+    function _create(uint256 nonce, uint256 deadline, string memory name, string memory symbol)
+        internal
+        returns (address)
+    {
         vm.prank(creator);
         return fac.createToken(name, symbol, 1000, "a frog coin", nonce, deadline, pk, sig);
     }
@@ -83,34 +87,49 @@ contract ReqoV4Test is Test {
     }
 
     function test_forgedSignatureReverts() public {
-        MockPqc(PQC).setAnswer(false);
+        MockPqc(PQC_VERIFY).setAnswer(false);
         vm.expectRevert(bytes("pqc: bad signature"));
         _create(1, block.timestamp + 1 hours, "Frog", "CROAK");
     }
 
     function test_missingPrecompileFailsClosed() public {
-        vm.etch(PQC, hex"");
+        vm.etch(PQC_VERIFY, hex"");
         vm.expectRevert(bytes("pqc unavailable"));
         _create(1, block.timestamp + 1 hours, "Frog", "CROAK");
     }
 
     function test_unregisteredKeyReverts() public {
         address stranger = makeAddr("stranger");
-        vm.deal(stranger, 1 ether);
+        vm.deal(stranger, 25 ether);
         vm.startPrank(stranger);
         wqor.deposit{value: 20 ether}();
         wqor.approve(address(fac), type(uint256).max);
         vm.stopPrank();
 
-        vm.prank(stranger);
         vm.expectRevert(bytes("key not proven"));
+        vm.prank(stranger);
+        fac.createToken("Frog", "CROAK", 1000, "", 1, block.timestamp + 1 hours, pk, sig);
+    }
+
+    function test_unprovenPossessionReverts() public {
+        // Registered, but the registration never proved possession of the secret key.
+        address unproven = makeAddr("unproven");
+        vm.deal(unproven, 25 ether);
+        vm.startPrank(unproven);
+        wqor.deposit{value: 20 ether}();
+        wqor.approve(address(fac), type(uint256).max);
+        vm.stopPrank();
+        MockKeyStatus(PQC_KEY_STATUS).setKey(unproven, pk, false);
+
+        vm.expectRevert(bytes("key not proven"));
+        vm.prank(unproven);
         fac.createToken("Frog", "CROAK", 1000, "", 1, block.timestamp + 1 hours, pk, sig);
     }
 
     function test_keyNotOwnedByCallerReverts() public {
-        // The caller is registered with pk, but submits a different key.
-        vm.prank(creator);
+        // The caller's registered key is pk, but the submitted key is different.
         vm.expectRevert(bytes("key not owned"));
+        vm.prank(creator);
         fac.createToken("Frog", "CROAK", 1000, "", 1, block.timestamp + 1 hours, hex"99", sig);
     }
 
@@ -130,7 +149,7 @@ contract ReqoV4Test is Test {
     function test_messageStartsWithQoreSignPrefixAndChain() public view {
         bytes memory m = fac.messageFor(creator, 1, 2, "Frog", "CROAK", 1000, "");
         bytes memory expected = bytes("qorechain-msg-v1|qorechain-diana|");
-        assertEq(m.length > expected.length, true);
+        assertTrue(m.length > expected.length);
         for (uint256 i = 0; i < expected.length; i++) {
             assertEq(uint8(m[i]), uint8(expected[i]));
         }
