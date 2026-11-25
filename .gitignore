@@ -8,3 +8,4 @@ cache/
 lib/
 foundry.lock
 foundry.toml~
+.gitmodules
