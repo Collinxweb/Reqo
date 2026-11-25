@@ -235,6 +235,8 @@ Newest first.
 
 | Version | Date | Commit | Change |
 |---|---|---|---|
+| v4.15.1 | 2026-11-25 | (pending) | v4 tests: 14 of 14 pass against the documented `pqcKeyStatus` ABI (`test/ReqoV4.t.sol`). The earlier 13-test pass used the placeholder interface and does not count. Mock precompiles only; live checks are the `cast` results recorded below. Local precompile fork tests removed from the repo: a local fork cannot run QoreChain's built-in precompiles. |
+| v4.15.0 | 2026-11-25 | (pending) | Launch gate v4 (`src/ReqoV4.sol`): pqcVerify at 0x…0A01, key status from pqcKeyStatus at 0x…0A02 (registered, algorithmId 1, possessionProven, and the submitted key must equal the registered key), fail-closed staticcall, ASCII names and A-Z/0-9 tickers, relayed path removed. Tests: `test/ReqoV4.t.sol` (14 mock tests, all passing against the documented ABI). Diana checks with cast: unregistered pqcKeyStatus returns false/0/0x/false; official vector 0 verifies true; tampered message returns false; one pqcVerify call estimates at 311,540 gas. |
 | v4.14.0 | 2026-11-24 | (pending) | Reqo AI check, step 2. Reqo AI turns an idea into a draft and never generates images. The check runs on the draft and in the review: name and ticker format, supply, the 280-byte limit including the image link, ticker and name clashes against Reqo tokens, and picture status. Without a picture the check warns that the token launches without one, and signing needs an explicit no-picture confirmation. Agent v3.2 forbids offering to create pictures. |
 | v4.13.0 | 2026-11-23 | (pending) | QoreX confirmations applied: EIP-6963 discovery (`isQoreX`, rdns `network.qore.qorex`); network switch returns null on testnet, 4100 on mainnet, 4902 for an unknown chain; qor1 read from `window.qorex.native.getKey("qorechain-diana")`; the window endpoint takes qor1 only; QoreX opens a one-transaction window inside each approval, so the window pre-check is skipped for QoreX and kept for MetaMask; registration status read from `/api/account`; api-testnet sends no CORS headers, so the browser reads chain data only through server proxies. |
 | v4.12.2 | 2026-11-23 | (pending) | Fixed an unclosed Launch `div` that nested every later section and blanked the page. |
@@ -387,3 +389,45 @@ Swap is the next major feature. Two routes are possible:
 | B. Chain AMM module | Use QoreChain's native `amm` module, which the SDK exposes. | Possibly less contract work, but requires native transaction signing and a different frontend path. Unverified on testnet. |
 
 Route A is in use: a constant-product pool created per token by the v3 factory. Route B was not pursued.
+
+## v4 launch gate and Diana verification (25 November 2026)
+
+### Built
+- `MemeFactoryV4` (`src/ReqoV4.sol`): a token launches only when the caller's ML-DSA-87 key signs the exact request. The gate calls `pqcVerify` at `0x…0A01`. The key comes from `pqcKeyStatus` at `0x…0A02`, which must return `registered`, `algorithmId == 1` and `possessionProven`. The submitted public key must equal the registered one.
+- Signed message: `"qorechain-msg-v1|qorechain-diana|" || abi.encode(DOMAIN_TAG, chainid, factory, creator, nonce, deadline, name, symbol, supply, keccak256(description))`. The contract builds it, so the caller can't choose a different message.
+- Fail closed: a failed staticcall, or a result that isn't a 32-byte bool, reverts. No default passes.
+- F1 fix: names are printable ASCII, tickers are A-Z or 0-9.
+- F2 fix: the relayed path is removed, so only the creator can launch.
+- Pool and token unchanged from v3.
+
+### Tests
+- `test/ReqoV4.t.sol`: 14 mock-based tests, covering the gate, possession, key ownership, expiry, nonce replay, the message, and the ASCII rules. **Status: all 14 pass against the documented interface.** The earlier 13-test version passed against the placeholder interface, so it doesn't count.
+- Foundry fork tests for the precompiles fail locally. A local fork doesn't include the node's built-in precompiles, so calls to `0x…0A01` and `0x…0A02` return nothing. Precompile behaviour is verified with `cast` against the live node.
+
+### Verified on Diana (`qorechain-diana`, chain 9800), with `cast`
+| Check | Result | Expected | Status |
+|---|---|---|---|
+| `pqcKeyStatus(0x…0001)` (unregistered) | `false`, `0`, `0x`, `false` | Documented result | Verified |
+| `pqcVerify` on official vector 0 | `true` | Valid signature | Verified |
+| `pqcVerify` with last message byte changed to `ff` | `false`, no revert | Documented behaviour | Verified |
+| `cast estimate` for one `pqcVerify` call | 311,540 gas | Documented precompile charge is about 85k; the estimate includes transaction base and calldata | Verified, Diana |
+
+Still to measure: the full `createToken` gas, once v4 is deployed.
+
+### Vector
+- Source: `qorechain/qorechain-pqc`, `vectors/ml-dsa-87.json`, Apache-2.0, copied unmodified to `test/vectors/ml-dsa-87.json` (122,454 bytes).
+- Five cases, public keys 2,592 bytes and signatures 4,627 bytes. Messages are `qorechain-pqc/vector/N`.
+- The requested message `qorechain-msg-v1|qorechain-diana|hello qorechain` is not in any official vector. The Reqo prefix still needs an end-to-end test once QoreX signing is confirmed.
+
+### Corrections to earlier claims
+- **Front-running a permit does not break a swap.** The pool skips its own permit when the allowance is already set. The README must not say otherwise.
+- **The chain accepts deterministic and hedged ML-DSA-87 signatures.** The earlier "deterministic only" claim was wrong.
+- **QoreX `signArbitrary` availability is unconfirmed** in the live extension. The `QOREX_NOT_SUPPORTED_YET` message came from a mock wallet profile, per QoreChain.
+
+### Open
+1. Confirm `lib/` is untracked: `git ls-files | grep -c "^lib/"` should print `0`.
+2. ~~Run the 14 v4 mock tests and record the result.~~ Done: 14 of 14 pass.
+3. Measure the full `createToken` gas after deployment.
+4. Confirm QoreX `signArbitrary` against the live extension, including the Base64 PQ signature decoding.
+5. Ticker uniqueness: a product decision, still open.
+6. Decide whether the fork-test file keeps only the file-size check.
