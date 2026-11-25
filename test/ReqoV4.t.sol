@@ -96,14 +96,14 @@ contract ReqoV4Test is Test {
 
     function test_unregisteredKeyReverts() public {
         address stranger = makeAddr("stranger");
-        vm.deal(stranger, 25 ether);
+        vm.deal(stranger, 1 ether);
         vm.startPrank(stranger);
         wqor.deposit{value: 20 ether}();
         wqor.approve(address(fac), type(uint256).max);
         vm.stopPrank();
 
-        vm.expectRevert(bytes("key not proven"));
         vm.prank(stranger);
+        vm.expectRevert(bytes("key not proven"));
         fac.createToken("Frog", "CROAK", 1000, "", 1, block.timestamp + 1 hours, pk, sig);
     }
 
