@@ -1,61 +1,47 @@
 #!/usr/bin/env bash
-# Verifies QoreChain's PQC precompiles on qorechain-diana against the live node, using cast.
-# A local Foundry fork cannot run the chain's built-in precompiles, so these checks run on the node.
-#
-# Requires: cast (Foundry), python3, network access to the RPC.
-# Usage (from the repo root): scripts/verify-diana.sh
-set -euo pipefail
+# Live checks of QoreChain's PQC precompiles on qorechain-diana, using cast.
+# Every step prints before it runs. Each cast call has a 60 s timeout, so a stall is reported.
+# Run from the repo root: scripts/verify-diana.sh
+RPC="https://evm-testnet.qore.host"
+VECTORS="test/vectors/ml-dsa-87.json"
+VERIFY=0x0000000000000000000000000000000000000a01
+KEYSTATUS=0x0000000000000000000000000000000000000a02
+UNREG=0x0000000000000000000000000000000000000001
+FAILS=0
 
-RPC="${RPC:-https://evm-testnet.qore.host}"
-VECTORS="${VECTORS:-test/vectors/ml-dsa-87.json}"
-PQC_VERIFY=0x0000000000000000000000000000000000000a01
-PQC_KEY_STATUS=0x0000000000000000000000000000000000000a02
-UNREGISTERED=0x0000000000000000000000000000000000000001
+say() { echo "[$(date +%H:%M:%S)] $*"; }
+call() { timeout 60 cast "$@" --rpc-url "$RPC"; }
 
-fails=0
-tmp=$(mktemp)
-trap 'rm -f "$tmp"' EXIT
-pass() { echo "PASS  $1"; }
-fail() { echo "FAIL  $1 (got: $2)"; fails=$((fails + 1)); }
+say "step 1: chain id"
+ID=$(call chain-id) && [ "$ID" = "9800" ] && say "PASS chain id 9800" || { say "FAIL chain id: got '$ID'"; FAILS=$((FAILS+1)); }
 
-command -v cast >/dev/null || { echo "cast not found: install Foundry first"; exit 2; }
-command -v python3 >/dev/null || { echo "python3 not found"; exit 2; }
-[ -f "$VECTORS" ] || { echo "vector file not found: $VECTORS"; exit 2; }
+say "step 2: pqcKeyStatus for an unregistered account"
+KS=$(call call $KEYSTATUS "pqcKeyStatus(address)(bool,uint8,bytes,bool)" $UNREG | tr '\n' ' ' | sed 's/ *$//')
+[ "$KS" = "false 0 0x false" ] && say "PASS pqcKeyStatus" || { say "FAIL pqcKeyStatus: got '$KS'"; FAILS=$((FAILS+1)); }
 
-# 1. Chain identity
-chain=$(cast chain-id --rpc-url "$RPC")
-if [ "$chain" = "9800" ]; then pass "chain id is 9800 (qorechain-diana)"; else fail "chain id is 9800" "$chain"; fi
+say "step 3: count vectors"
+N=$(python3 -c 'import json; print(len(json.load(open("'"$VECTORS"'"))["cases"]))')
+say "found $N vectors"
 
-# 2. pqcKeyStatus for an unregistered account: documented result (false, 0, 0x, false)
-ks=$(cast call "$PQC_KEY_STATUS" "pqcKeyStatus(address)(bool,uint8,bytes,bool)" "$UNREGISTERED" --rpc-url "$RPC" | tr '\n' ' ' | sed 's/ *$//')
-if [ "$ks" = "false 0 0x false" ]; then pass "pqcKeyStatus: unregistered account"; else fail "pqcKeyStatus: unregistered account" "$ks"; fi
-
-# 3. pqcVerify on every official vector must return true
-count=$(python3 -c 'import json,sys; print(len(json.load(open(sys.argv[1]))["cases"]))' "$VECTORS")
-for i in $(seq 0 $((count - 1))); do
-  # Write the three fields to a file first: reading them through a pipe breaks on large values.
-  python3 -c 'import json,sys
-c = json.load(open(sys.argv[1]))["cases"][int(sys.argv[2])]
-open(sys.argv[3], "w").write(" ".join([c["publicKey"], c["signature"], c["message"]]))' "$VECTORS" "$i" "$tmp"
-  read -r PK SIG MSG < "$tmp"
-  r=$(cast call "$PQC_VERIFY" "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$MSG" --rpc-url "$RPC")
-  if [ "$r" = "true" ]; then pass "pqcVerify: official vector $i verifies"; else fail "pqcVerify: official vector $i verifies" "$r"; fi
-
-  # 4. Tampered message (last byte flipped) must return false, not revert
+for i in $(seq 0 $((N-1))); do
+  say "step 3.$i: vector $i"
+  python3 -c 'import json
+c = json.load(open("'"$VECTORS"'"))["cases"]['"$i"']
+print(c["publicKey"]); print(c["signature"]); print(c["message"])' > /tmp/v.txt
+  PK=$(sed -n 1p /tmp/v.txt); SIG=$(sed -n 2p /tmp/v.txt); MSG=$(sed -n 3p /tmp/v.txt)
+  R=$(call call $VERIFY "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$MSG")
+  [ "$R" = "true" ] && say "PASS vector $i verifies" || { say "FAIL vector $i: got '$R'"; FAILS=$((FAILS+1)); }
   if [ "$i" = "0" ]; then
+    say "step 4: tampered message (vector 0)"
     BAD=$(python3 -c 'import sys
-b = bytearray.fromhex(sys.argv[1][2:])
-b[-1] ^= 1
-print("0x" + b.hex())' "$MSG")
-    t=$(cast call "$PQC_VERIFY" "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$BAD" --rpc-url "$RPC" 2>&1 || true)
-    if [ "$t" = "false" ]; then pass "pqcVerify: tampered message returns false (no revert)"; else fail "pqcVerify: tampered message returns false" "$t"; fi
-
-    # 5. Gas for one verification on Diana (node estimate, includes tx base and calldata)
-    gas=$(cast estimate "$PQC_VERIFY" "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$MSG" --rpc-url "$RPC")
-    echo "INFO  pqcVerify gas on Diana (vector 0): $gas"
+b = bytearray.fromhex(sys.argv[1][2:]); b[-1] ^= 1; print("0x" + b.hex())' "$MSG")
+    T=$(call call $VERIFY "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$BAD")
+    [ "$T" = "false" ] && say "PASS tampered returns false" || { say "FAIL tampered: got '$T'"; FAILS=$((FAILS+1)); }
+    say "step 5: gas estimate"
+    G=$(call estimate $VERIFY "pqcVerify(bytes,bytes,bytes)(bool)" "$PK" "$SIG" "$MSG")
+    say "INFO gas for one pqcVerify on Diana: $G"
   fi
 done
 
-echo
-if [ "$fails" -eq 0 ]; then echo "All Diana checks passed."; else echo "$fails check(s) failed."; fi
-exit "$fails"
+say "done: $FAILS failure(s)"
+exit $FAILS
