@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.2 design wired: dashboard startup fix -->
+<!-- version: v4.16.3 design wired: Reqo AI runs pqcVerify and key checks -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -539,6 +539,7 @@ async function applyDraft(d) {
 async function sendAI() {
   const text = $("ai-input").value.trim();
   if (!text) return;
+  if (await chainVerify(text)) { $("ai-input").value = ""; return; }
   $("ai-input").value = "";
   addMsg("user", text);
   aiHistory.push({ role: "user", content: text });
@@ -1502,6 +1503,72 @@ document.querySelectorAll("#dash-tabs button").forEach((b) => b.onclick = () => 
   renderDashboard();
 });
 $("d-notice").onclick = () => show("wallet");
+
+// ---- Reqo AI verification: live chain reads only, nothing is signed ----
+const PQC_VERIFY_ADDR = "0x0000000000000000000000000000000000000a01";
+const PQC_VERIFY_ABI = ["function pqcVerify(bytes,bytes,bytes) view returns (bool)"];
+const FAC_CREATOR_ABI = ["function creatorOf(address) view returns (address)"];
+const MSG_PREFIX_TXT = "qorechain-msg-v1|qorechain-diana|";
+function aiCard(title, lines) {
+  const m = document.createElement("div");
+  m.className = "msg ai";
+  m.append(title, checkBox({ lines }));
+  chat.append(m);
+  chat.scrollTop = chat.scrollHeight;
+}
+async function verifyToken(addr) {
+  const c4 = await new ethers.Contract(FACTORY_V4, FAC_CREATOR_ABI, reader).creatorOf(addr);
+  const c3 = await new ethers.Contract(FACTORY_V3, FAC_CREATOR_ABI, reader).creatorOf(addr);
+  const lines = [];
+  if (c4 !== ethers.ZeroAddress) lines.push(["ok", "Launched through MemeFactoryV4, which requires a verified ML-DSA-87 signature."]);
+  else if (c3 !== ethers.ZeroAddress) lines.push(["warn", "Launched through MemeFactoryV3: legacy, no PQC check."]);
+  else return aiCard("Token verification", [["bad", "Not a Reqo token from either factory."]]);
+  const creator = c4 !== ethers.ZeroAddress ? c4 : c3;
+  lines.push(["ok", "Creator: " + creator]);
+  const [registered, alg, pk, proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(creator);
+  lines.push([registered ? "ok" : "bad", registered ? "Creator's key is registered on chain." : "Creator has no registered key."]);
+  lines.push([Number(alg) === 1 ? "ok" : "bad", "Algorithm: ML-DSA-87 (id " + alg + ")."]);
+  lines.push([proven ? "ok" : "bad", proven ? "Possession of the key is proven." : "Possession is not proven."]);
+  if (registered) lines.push(["ok", "Key hash: " + ethers.keccak256(pk).slice(0, 18) + "…"]);
+  lines.push(["warn", "This is the creator's key status now. The launch's own signature is in its transaction."]);
+  aiCard("Token verification", lines);
+}
+async function verifySignature(obj) {
+  const { pubkey: pk, signature: sig, message: msg } = obj;
+  if (![pk, sig, msg].every((x) => typeof x === "string" && ethers.isHexString(x))) {
+    return aiCard("Signature verification", [["bad", "pubkey, signature and message must be 0x hex strings."]]);
+  }
+  const pkLen = (pk.length - 2) / 2, sigLen = (sig.length - 2) / 2;
+  const text = new TextDecoder().decode(ethers.getBytes(msg));
+  const lines = [
+    [pkLen === 2592 ? "ok" : "bad", "Public key: " + pkLen + " bytes (ML-DSA-87 needs 2592)."],
+    [sigLen === 4627 ? "ok" : "bad", "Signature: " + sigLen + " bytes (ML-DSA-87 needs 4627)."],
+    [text.startsWith(MSG_PREFIX_TXT) ? "ok" : "warn", text.startsWith(MSG_PREFIX_TXT) ? "Message has the QoreSign prefix for Diana." : "Message lacks the qorechain-msg-v1 prefix. The chain checks exactly the bytes given."]
+  ];
+  const iface = new ethers.Interface(PQC_VERIFY_ABI);
+  const raw = await reader.call({ to: PQC_VERIFY_ADDR, data: iface.encodeFunctionData("pqcVerify", [pk, sig, msg]) });
+  const ok = iface.decodeFunctionResult("pqcVerify", raw)[0];
+  lines.push([ok ? "ok" : "bad", ok ? "Diana's pqcVerify returned true." : "Diana's pqcVerify returned false: the signature does not match this key and message."]);
+  aiCard("Signature verification", lines);
+}
+async function chainVerify(text) {
+  const t = text.trim();
+  if (t.startsWith("{")) {
+    let obj;
+    try { obj = JSON.parse(t); } catch (e) { return false; }
+    if (!obj.pubkey || !obj.signature || !obj.message) return false;
+    addMsg("user", "Verify signature (" + t.length + " characters)");
+    try { await verifySignature(obj); } catch (e) { aiCard("Signature verification", [["bad", "Chain call failed: " + errText(e)]]); }
+    return true;
+  }
+  const m = t.match(/0x[0-9a-fA-F]{40}/);
+  if (m && /verify|check/i.test(t)) {
+    addMsg("user", t);
+    try { await verifyToken(m[0]); } catch (e) { aiCard("Token verification", [["bad", "Chain call failed: " + errText(e)]]); }
+    return true;
+  }
+  return false;
+}
 </script>
 </body>
 </html>
