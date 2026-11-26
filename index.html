@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.15.4 design wired: launch checks each step separately -->
+<!-- version: v4.15.5 design wired: WQOR approval targets the V4 factory -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -883,10 +883,10 @@ $("dlg-sign").onclick = async () => {
       s1.textContent = "1. Wrap submitted. "; s1.append(hlink(tx.hash));
       await tx.wait(); s1.textContent = "1. Wrap confirmed. "; s1.append(hlink(tx.hash));
     }
-    const al = await wq.allowance(addr, FACTORY);
+    const al = await wq.allowance(addr, FACTORY_V4);
     if (al < SEED) {
       setProgress({ ...pg, text: "Step 2 of 3: approve the factory. Confirm in your wallet." }); const s2 = addStep("2. Approve the factory: confirm in your wallet");
-      const tx = await wq.approve(FACTORY, SEED);
+      const tx = await wq.approve(FACTORY_V4, SEED);
       s2.textContent = "2. Approve submitted. "; s2.append(hlink(tx.hash));
       await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
     }
