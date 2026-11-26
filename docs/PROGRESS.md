@@ -479,3 +479,12 @@ Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML
 - Signature: 4,627 bytes, ML-DSA-87, decoded from QoreX's base64 `pq.signature`.
 - `pqcVerify` on Diana with the registered public key and prefixed message: `true`.
 - Downloads must be checked by size (9,254 hex characters) before use.
+
+## First live launch on V4 with QoreX signing (26 November 2026)
+
+- Factory: MemeFactoryV4 `0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57`
+- Token: `0xb23E095B1EA613048B257247D6A6BDf1583CED3D`, pool `0x9cfcC62597078cD284F6adc32D0A221fa74BB86B`
+- Creator: `0x421d780796E900f415fEAe2D12169dfdC6Cf31FA`, signing with QoreX
+- Transactions: approve `0x91656b25d3243483823980bda59bbaaaec3f47907895d416b12f27303e69042b`, create `0x1b009044057f5ae3359ec2230614a3f03199c93b2b977b2d6d2984bb261ef928`
+- Launched without a picture (the review's no-picture confirmation was used).
+- Fixes that made it work: the approval targeted the V3 factory, now V4; trade and launch typed data are sent in the format QoreX accepts (ethers' payload is not accepted).
