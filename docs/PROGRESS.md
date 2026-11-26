@@ -488,3 +488,12 @@ Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML
 - Transactions: approve `0x91656b25d3243483823980bda59bbaaaec3f47907895d416b12f27303e69042b`, create `0x1b009044057f5ae3359ec2230614a3f03199c93b2b977b2d6d2984bb261ef928`
 - Launched without a picture (the review's no-picture confirmation was used).
 - Fixes that made it work: the approval targeted the V3 factory, now V4; trade and launch typed data are sent in the format QoreX accepts (ethers' payload is not accepted).
+
+## v4.16.0: legacy labels, settings and docs (26 November 2026)
+
+- Build: `design/reqo-design-v4.16.0.html`, served as `index.html`.
+- Dashboard: a three-line menu button opens Settings. Settings links to the README, the QCAI stage 1 audit, the security review and this progress log. More settings will be added there later.
+- Legacy labels: tokens from MemeFactoryV3 are marked "Legacy, no PQC check" in the Dashboard, the Trade picker and the Wallet.
+- QCAI stage 1: `docs/QCAI-stage1.md`. Verdict: high-severity architectural bypass through the V3 factory (F-01). Low: symbol uniqueness (F-02). Informational: donations (F-03). No critical reserve-drain issue in the reviewed pool source.
+- Status of F-01: open in the contracts, since deployed bytecode can't change. Mitigated in the app by the legacy labels. The README must state that PQC authorization applies to launches through MemeFactoryV4.
+- Earlier this session: the trade signs with the accepted payload format; the launch approves the V4 factory; the first live V4 launch with QoreX signing succeeded.
