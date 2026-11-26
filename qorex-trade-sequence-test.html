@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QoreX trade sequence test</title>
+<style>body{font-family:system-ui;background:#0a0c0b;color:#f2f5f3;padding:16px;max-width:760px;margin:auto}
+button{padding:14px;border-radius:999px;border:0;background:#c6ff1a;color:#0a0c0b;font-weight:800;width:100%;margin:8px 0}
+pre{background:#13161a;padding:12px;border-radius:12px;white-space:pre-wrap;word-break:break-all;font-size:12px}</style>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script></head>
+<body>
+<h3>QoreX trade sequence test</h3>
+<p>Runs the trade's own signing sequence: a permit, then a swap intent, both through an ethers signer, as the trade does. Nothing is sent to the chain.</p>
+<button id="run">Run sequence</button>
+<pre id="out">Not run yet.</pre>
+<script>
+const out = (t) => { document.getElementById("out").textContent = t; };
+const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
+const POOL = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
+function findProvider() {
+  return new Promise((resolve) => {
+    const found = [];
+    window.addEventListener("eip6963:announceProvider", (e) => found.push(e.detail));
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    setTimeout(() => {
+      const q = found.find((d) => d.info.rdns === "network.qore.qorex");
+      resolve(q ? q.provider : (window.ethereum || null));
+    }, 400);
+  });
+}
+document.getElementById("run").onclick = async () => {
+  try {
+    const raw = await findProvider();
+    if (!raw) return out("No EVM provider found.");
+    const p = new ethers.BrowserProvider(raw);
+    await p.send("eth_requestAccounts", []);
+    const signer = await p.getSigner();
+    const trader = await signer.getAddress();
+    let log = "Trader (signer.getAddress): " + trader + "\n\n";
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 900);
+    const amountIn = 1000000000000000000n;
+
+    // 1. Permit on WQOR, same domain and fields as the trade
+    const wqorDomain = { name: "Wrapped QOR", version: "1", chainId: 9800, verifyingContract: WQOR };
+    const permitTypes = { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+    const permitValue = { owner: trader, spender: POOL, value: amountIn, nonce: 0n, deadline };
+    const permitSig = await signer.signTypedData(wqorDomain, permitTypes, permitValue);
+    const permitBy = ethers.verifyTypedData(wqorDomain, permitTypes, permitValue, permitSig);
+    log += "Permit: recovers to " + permitBy + (permitBy.toLowerCase() === trader.toLowerCase() ? "  (matches)" : "  (DOES NOT match)") + "\n";
+
+    // 2. Swap intent on the pool, same domain and fields as the trade
+    const poolDomain = { name: "Reqo Pool", version: "1", chainId: 9800, verifyingContract: POOL };
+    const intentTypes = { Swap: [{ name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+    const intent = { trader, buy: true, amountIn, minOut: 0n, nonce: BigInt(Date.now()), deadline };
+    const intentSig = await signer.signTypedData(poolDomain, intentTypes, intent);
+    const intentBy = ethers.verifyTypedData(poolDomain, intentTypes, intent, intentSig);
+    log += "Intent: recovers to " + intentBy + (intentBy.toLowerCase() === trader.toLowerCase() ? "  (matches)" : "  (DOES NOT match)") + "\n";
+    out(log);
+  } catch (e) { out("Failed: " + (e && e.message ? e.message : String(e))); }
+};
+</script></body></html>
