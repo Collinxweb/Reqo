@@ -43,6 +43,24 @@ document.getElementById("run").onclick = async () => {
       const same = recovered.toLowerCase() === acct.toLowerCase();
       log += "Signature " + i + ": recovers to " + recovered + (same ? "  (matches account)" : "  (DOES NOT match account)") + "\n";
     }
+    // Second set: the same shape as the trade's SwapIntent, with the pool-style domain
+    const poolDomain = { name: "Reqo Pool", version: "1", chainId: 9800, verifyingContract: "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57" };
+    const intentTypes = { SwapIntent: [
+      { name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" },
+      { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
+    log += "\nSwapIntent with pool domain:\n";
+    for (let i = 1; i <= 3; i++) {
+      const value = { trader: acct, buy: true, amountIn: 1000000000000000000n + BigInt(i), minOut: 0n, nonce: BigInt(Date.now()) + BigInt(i), deadline: BigInt(Math.floor(Date.now() / 1000) + 900) };
+      const payload = JSON.stringify({
+        types: { EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }, { name: "verifyingContract", type: "address" }], ...intentTypes },
+        primaryType: "SwapIntent", domain: poolDomain,
+        message: { ...value, amountIn: value.amountIn.toString(), minOut: "0", nonce: value.nonce.toString(), deadline: value.deadline.toString() }
+      });
+      const sig = await p.request({ method: "eth_signTypedData_v4", params: [acct, payload] });
+      const recovered = ethers.verifyTypedData(poolDomain, intentTypes, value, sig);
+      const same = recovered.toLowerCase() === acct.toLowerCase();
+      log += "Intent " + i + ": recovers to " + recovered + (same ? "  (matches account)" : "  (DOES NOT match account)") + "\n";
+    }
     out(log);
   } catch (e) { out("Failed: " + (e && e.message ? e.message : String(e))); }
 };
