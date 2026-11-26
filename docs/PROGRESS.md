@@ -431,3 +431,18 @@ Still to measure: the full `createToken` gas, once v4 is deployed.
 4. Confirm QoreX `signArbitrary` against the live extension, including the Base64 PQ signature decoding.
 5. Ticker uniqueness: a product decision, still open.
 6. Decide whether the fork-test file keeps only the file-size check.
+
+## Diana live verification (26 November 2026)
+
+Run: `scripts/verify-diana.sh` from the repo root, against https://evm-testnet.qore.host (chain 9800).
+
+| Check | Result |
+|---|---|
+| Chain ID | 9800 (PASS) |
+| pqcKeyStatus, unregistered account | false, 0, 0x, false (PASS) |
+| pqcVerify, official vectors 0 to 4 (test/vectors/ml-dsa-87.json) | all true (PASS) |
+| pqcVerify, vector 0 with last byte flipped | false, no revert (PASS) |
+| pqcVerify gas, one call (node estimate) | 311,540 |
+| Failures | 0 |
+
+Note: each vector call took 9 to 25 seconds on the node.
