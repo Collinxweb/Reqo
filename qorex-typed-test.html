@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QoreX typed-data test</title>
+<style>body{font-family:system-ui;background:#0a0c0b;color:#f2f5f3;padding:16px;max-width:760px;margin:auto}
+button{padding:14px;border-radius:999px;border:0;background:#c6ff1a;color:#0a0c0b;font-weight:800;width:100%;margin:8px 0}
+pre{background:#13161a;padding:12px;border-radius:12px;white-space:pre-wrap;word-break:break-all;font-size:12px}</style>
+<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script></head>
+<body>
+<h3>QoreX typed-data test</h3>
+<p>Signs three small EIP-712 messages with QoreX's EVM provider and checks each signature locally. Nothing is sent to the chain.</p>
+<button id="run">Run test</button>
+<pre id="out">Not run yet.</pre>
+<script>
+const out = (t) => { document.getElementById("out").textContent = t; };
+function findProvider() {
+  return new Promise((resolve) => {
+    const found = [];
+    window.addEventListener("eip6963:announceProvider", (e) => found.push(e.detail));
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    setTimeout(() => {
+      const q = found.find((d) => d.info.rdns === "network.qore.qorex");
+      resolve(q ? q.provider : (window.ethereum || null));
+    }, 400);
+  });
+}
+document.getElementById("run").onclick = async () => {
+  try {
+    const p = await findProvider();
+    if (!p) return out("No EVM provider found.");
+    const accts = await p.request({ method: "eth_requestAccounts" });
+    const acct = accts[0];
+    let log = "Provider account (eth_requestAccounts): " + acct + "\n\n";
+    const domain = { name: "ReqoTypedTest", version: "1", chainId: 9800 };
+    const types = { Ping: [{ name: "msg", type: "string" }, { name: "n", type: "uint256" }] };
+    for (let i = 1; i <= 3; i++) {
+      const value = { msg: "hello", n: i };
+      const payload = JSON.stringify({
+        types: { EIP712Domain: [{ name: "name", type: "string" }, { name: "version", type: "string" }, { name: "chainId", type: "uint256" }], ...types },
+        primaryType: "Ping", domain, message: value
+      });
+      const sig = await p.request({ method: "eth_signTypedData_v4", params: [acct, payload] });
+      const recovered = ethers.verifyTypedData(domain, types, value, sig);
+      const same = recovered.toLowerCase() === acct.toLowerCase();
+      log += "Signature " + i + ": recovers to " + recovered + (same ? "  (matches account)" : "  (DOES NOT match account)") + "\n";
+    }
+    out(log);
+  } catch (e) { out("Failed: " + (e && e.message ? e.message : String(e))); }
+};
+</script></body></html>
