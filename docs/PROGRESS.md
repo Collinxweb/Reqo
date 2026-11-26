@@ -446,3 +446,16 @@ Run: `scripts/verify-diana.sh` from the repo root, against https://evm-testnet.q
 | Failures | 0 |
 
 Note: each vector call took 9 to 25 seconds on the node.
+
+## v4 deployed to Diana (26 November 2026)
+
+| Item | Value |
+|---|---|
+| Contract | MemeFactoryV4 (`src/ReqoV4.sol`) |
+| Address | `0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57` |
+| Deploy tx | `0x50eb68cebfe7d6cde603043a5ff70666c55ae9de5d1450002e53b182b13a07ae` |
+| Deployer | `0x421d780796E900f415fEAe2D12169dfdC6Cf31FA` (account with an open window at deploy time) |
+| Constructor | WQOR `0xF78c2cC7dc1B9ae52403868dD2097732Abfca665` |
+| Checks | bytecode present; tokenCount 0; wqor matches; SEED_WQOR 10 WQOR |
+
+Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML-DSA signature over the request), and gas for the full `createToken`.
