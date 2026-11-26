@@ -9,14 +9,13 @@ pre{background:#13161a;padding:12px;border-radius:12px;white-space:pre-wrap;word
 <p>Signs the test message <code>hello qorechain</code> with the connected account's ML-DSA-87 key, through QoreX. Nothing is sent to the chain.</p>
 <button id="conn">1. Connect QoreX</button>
 <button id="sign" disabled>2. Sign test message</button>
-<p id="env"></p><h4>Result</h4><pre id="out">Not run yet.</pre><button id="save" disabled>3. Save signature file</button>
+<p id="env"></p><h4>Result</h4><pre id="out">Not run yet.</pre>
 <script>
 const env = document.getElementById("env");
 env.textContent = "Page origin: " + location.origin + " | window.qorex: " + (window.qorex ? "present" : "NOT present") + " | native: " + (window.qorex && window.qorex.native ? "present" : "NOT present");
 const out = (t) => { document.getElementById("out").textContent = t; };
 const b64ToHex = (b64) => "0x" + [...atob(b64)].map(c => c.charCodeAt(0).toString(16).padStart(2, "0")).join("");
 let acct = null;
-let pqHex = null;
 document.getElementById("conn").onclick = async () => {
   try {
     if (!window.qorex || !window.qorex.native) return out("QoreX native provider not found. Open this page in the browser where QoreX is installed.");
@@ -32,18 +31,9 @@ document.getElementById("sign").onclick = async () => {
     const data = new TextEncoder().encode("hello qorechain");
     const sig = await window.qorex.native.signArbitrary("qorechain-diana", acct, data);
     const pq = sig && sig.pq ? sig.pq.signature : null;
-    pqHex = pq ? b64ToHex(pq) : null;
-    document.getElementById("save").disabled = !pqHex;
     out(JSON.stringify(sig, null, 2) +
+      "\n\nPQ signature (hex, for cast):\n" + (pq ? b64ToHex(pq) : "no pq.signature field found") +
       "\n\nPQ signature length (bytes): " + (pq ? atob(pq).length : "n/a"));
   } catch (e) { out("Sign failed: " + (e && e.message ? e.message : String(e))); }
-};
-document.getElementById("save").onclick = () => {
-  const blob = new Blob([pqHex.slice(2)], { type: "text/plain" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "reqo-pq-sig.hex";
-  a.click();
-  out("Saved reqo-pq-sig.hex (" + (pqHex.length - 2) / 2 + " bytes). Check your Downloads folder.");
 };
 </script></body></html>
