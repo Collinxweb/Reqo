@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.0 design wired: legacy labels, settings and docs -->
+<!-- version: v4.16.2 design wired: dashboard startup fix -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -154,13 +154,25 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
   <!-- DASHBOARD -->
   <section id="view-dashboard" hidden>
-    <div class="card">
-      <div class="row" style="margin-bottom:4px"><h2 style="margin:0">Dashboard</h2><div style="display:flex;gap:8px;align-items:center"><button class="icon-btn" id="menu-btn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><button class="chip" id="d-refresh" style="margin:0">Refresh</button></div></div>
-      <div class="muted small">Tokens launched on Reqo, and your launch in progress.</div>
+    <div class="card" style="padding:18px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <img src="logo.png" alt="" style="width:44px;height:44px;border-radius:12px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:900;font-size:24px">Dashboard</div>
+          <div class="muted small">Your tokens, all in one place.</div>
+        </div>
+        <button class="icon-btn" id="menu-btn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      </div>
+    </div>
+    <div class="seg" id="dash-tabs" style="margin:12px 0"><button class="on" data-dtab="tokens">Tokens</button><button data-dtab="launches">Launches</button><button data-dtab="activity">Activity</button></div>
+    <div class="card" style="padding:14px">
+      <div class="row" style="margin-bottom:6px"><h2 style="margin:0"><span id="d-title">Tokens on Reqo</span> <span id="d-count" class="muted small"></span></h2><button class="chip" id="d-refresh" style="margin:0">Refresh</button></div>
       <div id="d-progress-wrap" hidden><div class="lbl">In progress</div><div id="d-progress"></div></div>
-      <div class="lbl">Launched on Reqo <span id="d-count" class="muted"></span></div>
       <div id="d-list" class="muted">Loading tokens...</div>
-      <div class="note">Newest first. Tap a token to trade it.</div>
+    </div>
+    <div class="card" id="d-notice" style="padding:14px;display:flex;gap:10px;align-items:center;cursor:pointer">
+      <div class="muted small" style="flex:1">Prices are not available yet. Balances and tokens are read live from QoreChain Diana testnet.</div>
+      <span style="font-size:18px">&rarr;</span>
     </div>
   </section>
 
@@ -350,6 +362,9 @@ function openWalletPicker() {
   $("dlg-wallet").showModal();
 }
 const $ = (id) => document.getElementById(id);
+let dashTab = "tokens"; // declared before any startup call
+const COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+
 // ---- v4 launch and multi-factory listing ----
 const FACTORY_V3 = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
 const FACTORY_V4 = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
@@ -1408,6 +1423,85 @@ withLoader("t-go", "Trading on Diana...");
 withLoader("snd-go", "Sending...");
 withLoader("dlg-sign", "Creating your token. Confirm each step in QoreX...");
 $("menu-btn").onclick = () => show("settings");
+
+// ---- Dashboard (v4.16.1): tokens, launches and activity, all read live ----
+function dashRow(r) {
+  const row = document.createElement("div");
+  row.className = "tok-row"; row.style.cursor = "pointer";
+  row.onclick = () => openTradeFor(r.addr);
+  const av = document.createElement("div"); av.className = "avatar";
+  setAvatar(av, r.img, (r.symbol || "?")[0], r.symbol);
+  const meta = document.createElement("div"); meta.className = "tok-meta";
+  const nm = document.createElement("div"); nm.className = "tok-name";
+  nm.textContent = r.name + " ";
+  const pq = document.createElement("span"); pq.className = "badge" + (r.pqc ? " good" : "");
+  pq.textContent = r.pqc ? "PQC launch" : "Legacy";
+  nm.append(pq);
+  if (r.mine) { const m = document.createElement("span"); m.className = "badge"; m.textContent = " Your token"; nm.append(" ", m); }
+  const sub = document.createElement("div"); sub.className = "tok-sub";
+  sub.textContent = "$" + r.symbol + " · " + short(r.addr);
+  meta.append(nm, sub);
+  const mkt = document.createElement("div"); mkt.style.textAlign = "right"; mkt.style.minWidth = "84px";
+  const ml = document.createElement("div"); ml.className = "tok-val"; ml.textContent = "Market data";
+  const mv = document.createElement("div"); mv.className = "tok-sub"; mv.textContent = "Unavailable";
+  mkt.append(ml, mv);
+  const copy = document.createElement("button"); copy.className = "icon-btn";
+  copy.setAttribute("aria-label", "Copy address"); copy.innerHTML = COPY_SVG;
+  copy.onclick = (ev) => {
+    ev.stopPropagation();
+    navigator.clipboard.writeText(r.addr).then(() => toast("Address copied")).catch(() => toast("Copy failed"));
+  };
+  row.append(av, meta, mkt, copy);
+  return row;
+}
+function dashActivity() {
+  const list = $("d-list");
+  list.textContent = ""; $("d-count").textContent = "";
+  if (!me) { list.textContent = "Connect your wallet to see your activity."; return; }
+  let items = [];
+  try { items = JSON.parse(localStorage.getItem("reqo-activity-" + me.toLowerCase())) || []; } catch (e) {}
+  if (!items.length) { list.textContent = "Transactions you make in Reqo appear here."; return; }
+  for (const x of items.slice(0, 50)) {
+    const row = document.createElement("div"); row.className = "hrow";
+    const meta = document.createElement("div"); meta.className = "tok-meta";
+    const t1 = document.createElement("div"); t1.className = "tok-name"; t1.textContent = x.title;
+    const t2 = document.createElement("div"); t2.className = "tok-sub"; t2.textContent = x.detail + " · " + new Date(x.at).toLocaleString();
+    const t3 = document.createElement("div"); t3.style.fontSize = "12px"; t3.style.wordBreak = "break-all"; t3.append(hlink(x.hash));
+    meta.append(t1, t2, t3);
+    row.append(meta);
+    list.append(row);
+  }
+}
+async function renderDashboard() {
+  $("d-title").textContent = dashTab === "tokens" ? "Tokens on Reqo" : dashTab === "launches" ? "Your launches" : "Activity";
+  if (dashTab === "activity") return dashActivity();
+  const list = $("d-list");
+  if (dashTab === "launches" && !me) { list.textContent = "Connect your wallet to see your launches."; $("d-count").textContent = ""; return; }
+  list.textContent = "Loading...";
+  try {
+    const all = await allFactoryTokens();
+    const rows = await Promise.all(all.slice().reverse().map(async (t) => {
+      const c = new ethers.Contract(t.addr, TOK_META, reader);
+      const [symbol, name, desc, creator] = await Promise.all([
+        c.symbol(), c.name(), c.description().catch(() => ""), c.creator().catch(() => ethers.ZeroAddress)
+      ]);
+      return { addr: t.addr, symbol, name, img: imgFrom(desc), pqc: t.factory === FACTORY_V4,
+               mine: !!me && creator.toLowerCase() === me.toLowerCase() };
+    }));
+    const shown = dashTab === "launches" ? rows.filter((r) => r.mine) : rows;
+    $("d-count").textContent = "(" + shown.length + ")";
+    list.textContent = "";
+    if (!shown.length) { list.textContent = dashTab === "launches" ? "You have not launched a token yet." : "No tokens launched yet."; return; }
+    for (const r of shown) list.append(dashRow(r));
+  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
+}
+async function loadDashboard() { return renderDashboard(); }
+document.querySelectorAll("#dash-tabs button").forEach((b) => b.onclick = () => {
+  dashTab = b.dataset.dtab;
+  document.querySelectorAll("#dash-tabs button").forEach((x) => x.classList.toggle("on", x === b));
+  renderDashboard();
+});
+$("d-notice").onclick = () => show("wallet");
 </script>
 </body>
 </html>
