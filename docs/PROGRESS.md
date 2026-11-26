@@ -472,3 +472,10 @@ Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML
 | Checks | bytecode present; tokenCount 0; wqor matches; SEED_WQOR 10 WQOR |
 
 Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML-DSA signature over the request), and gas for the full `createToken`.
+
+## QoreX signing verified on Diana (26 November 2026)
+
+- QoreX `signArbitrary` on qorechain-diana, account 0x421d…31fa (registered, possession proven), message `hello qorechain`.
+- Signature: 4,627 bytes, ML-DSA-87, decoded from QoreX's base64 `pq.signature`.
+- `pqcVerify` on Diana with the registered public key and prefixed message: `true`.
+- Downloads must be checked by size (9,254 hex characters) before use.
