@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.6 design wired: banner taps, launch and trade pop-ups, redirects -->
+<!-- version: v4.16.7 design wired: swap preflight, redirects, non-blocking loader, live docs -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -127,6 +127,16 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .slide-dots span.on{background:var(--accent)}
 .slide{pointer-events:none}
 .slide.active{pointer-events:auto}
+.doc-body{font-size:14px;line-height:1.55;word-break:break-word}
+.doc-body h2{font-size:17px;margin:18px 0 6px}
+.doc-body h3{font-size:15px;margin:14px 0 4px}
+.doc-body h4{font-size:14px;margin:12px 0 4px}
+.doc-body p{margin:6px 0}
+.doc-body ul{margin:6px 0 6px 20px;padding:0}
+.doc-body li{margin:3px 0}
+.doc-body code{background:var(--card2);padding:1px 5px;border-radius:6px;font-size:12px}
+.doc-body pre{background:var(--card2);padding:10px;border-radius:12px;overflow:auto;font-size:12px;white-space:pre-wrap}
+.doc-body a{color:var(--accent)}
 </style>
 </head>
 <body>
@@ -283,12 +293,13 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <div class="card">
       <div class="row" style="margin-bottom:6px"><h2 style="margin:0">Settings</h2><button class="chip" style="margin:0" onclick="show('dashboard')">Back</button></div>
       <div class="muted small">More settings will be added here.</div>
-      <div class="lbl">Documentation</div>
-      <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://github.com/Collinxweb/Reqo/blob/main/README.md" target="_blank" rel="noopener">README</a>
-      <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://github.com/Collinxweb/Reqo/blob/main/docs/QCAI-stage1.md" target="_blank" rel="noopener">QCAI stage 1 audit</a>
-      <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://github.com/Collinxweb/Reqo/blob/main/docs/SECURITY-REVIEW.md" target="_blank" rel="noopener">Security review</a>
-      <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://github.com/Collinxweb/Reqo/blob/main/docs/PROGRESS.md" target="_blank" rel="noopener">Progress log</a>
-      <div class="note">Documents are in the public repository.</div>
+      <div class="lbl">Documentation, read live from GitHub</div>
+      <div id="doc-list"></div>
+    </div>
+    <div class="card" id="doc-card" hidden>
+      <div class="row"><h2 id="doc-title" style="margin:0;font-size:17px"></h2><button class="chip" id="doc-close" style="margin:0">Close</button></div>
+      <div class="small muted" id="doc-source" style="margin:6px 0 12px;word-break:break-all"></div>
+      <div id="doc-body" class="doc-body"></div>
     </div>
   </section>
 
@@ -1003,7 +1014,7 @@ $("dlg-sign").onclick = async () => {
     ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
     $("l-file").value = ""; updateDescLimit(); $("l-hint").textContent = "Tap to choose an image";
     $("l-drop").querySelectorAll("img").forEach((i) => i.remove()); $("l-title").textContent = "Add a token image";
-    await loadWallet();
+    loadWallet().catch(() => {});
   } catch (e) {
     addStep("Stopped: " + errText(e), true);
     setProgress({ ...pg, text: "Stopped: " + errText(e), failed: true });
@@ -1232,6 +1243,13 @@ $("t-go").onclick = async () => {
     const dom = await poolC.eip712Domain();
     if (dom[1] !== "Reqo Pool" || dom[2] !== "1" || Number(dom[3]) !== CHAIN_ID || dom[4].toLowerCase() !== pool.toLowerCase()) throw new Error("the pool's signing domain is " + dom[1] + " v" + dom[2] + " on chain " + dom[3] + ", not the one this page signs.");
     tradeStatus("3 of 3: confirm the transaction in your wallet.");
+    const swapArgs = [intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s];
+    try {
+      await new ethers.Contract(pool, POOL_ABI, reader).swap.staticCall(...swapArgs, { from: trader });
+    } catch (e) {
+      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || errText(e);
+      throw new Error("the trade would revert: " + why);
+    }
     const tx = await new ethers.Contract(pool, POOL_ABI, signer).swap(intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s);
     tradeStatus("Submitted:", tx.hash);
     await tx.wait();
@@ -1248,9 +1266,9 @@ $("t-go").onclick = async () => {
     showSuccess(buy ? "Trade confirmed" : "Sale confirmed", (buy ? "Bought " : "Sold ") + "$" + t.sym + " on Diana.", tx.hash, () => { show("wallet"); loadWallet(); });
     logActivity({ kind: "trade", title: (buy ? "Bought $" : "Sold $") + t.sym, detail: sAmt + (buy ? " QOR" : " $" + t.sym), hash: tx.hash });
     $("t-amount").value = "";
-    await loadWallet();
+    loadWallet().catch(() => {});
   } catch (e) { tradeStatus("Stopped: " + errText(e)); }
-  finally { tradeBusy = false; await refreshTrade().catch(() => {}); }
+  finally { tradeBusy = false; refreshTrade().catch(() => {}); }
 };
 
 loadTradeTokens().catch(() => { $("t-token").textContent = ""; const o = document.createElement("option"); o.textContent = "Could not load tokens"; $("t-token").append(o); });
@@ -1655,6 +1673,7 @@ function resetLaunchForm() {
 
 // ---- Success pop-up with the Reqo logo and confetti ----
 function showSuccess(title, sub, hash, next) {
+  hideLoader();
   const old = document.getElementById("success"); if (old) old.remove();
   const wrap = document.createElement("div");
   wrap.id = "success"; wrap.className = "success";
@@ -1671,15 +1690,14 @@ function showSuccess(title, sub, hash, next) {
   const s2 = document.createElement("div"); s2.className = "success-sub"; s2.textContent = sub;
   card.append(logo, t, s2);
   if (hash) { const h = document.createElement("div"); h.style.cssText = "font-size:12px;word-break:break-all;margin-bottom:12px"; h.append(hlink(hash)); card.append(h); }
-  let done = false;
-  const finish = () => { if (done) return; done = true; wrap.remove(); if (next) next(); };
   const close = document.createElement("button"); close.className = "btn"; close.textContent = "Done"; close.style.margin = "0";
-  close.onclick = finish;
+  close.onclick = () => wrap.remove();
   card.append(close);
   wrap.append(card);
-  wrap.onclick = (e) => { if (e.target === wrap) finish(); };
+  wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
   document.body.append(wrap);
-  setTimeout(finish, 9000);
+  setTimeout(() => { if (wrap.isConnected) wrap.remove(); }, 9000);
+  if (next) next();
 }
 
 // ---- Dashboard banners: three real destinations, rotating every 5 seconds ----
@@ -1692,6 +1710,76 @@ function showSlide(i) {
 }
 document.querySelectorAll(".slide").forEach((sl) => sl.onclick = () => show(sl.dataset.go));
 setInterval(() => showSlide(slideIdx + 1), 5000);
+
+// ---- Live documentation: fetched from the public repository when opened ----
+const DOCS = [
+  { path: "README.md", title: "README" },
+  { path: "docs/QCAI-stage1.md", title: "QCAI stage 1 audit" },
+  { path: "docs/SECURITY-REVIEW.md", title: "Security review" },
+  { path: "docs/PROGRESS.md", title: "Progress log" },
+  { path: "docs/VECTOR-SOURCES.md", title: "Test vector sources" }
+];
+const REPO_RAW = "https://raw.githubusercontent.com/Collinxweb/Reqo/main/";
+const REPO_WEB = "https://github.com/Collinxweb/Reqo/blob/main/";
+function escHtml(x) { return x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
+function mdInline(x) {
+  return escHtml(x)
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function renderMd(md) {
+  const out = []; let inCode = false, code = [], table = [], list = false;
+  const endList = () => { if (list) { out.push("</ul>"); list = false; } };
+  const endTable = () => { if (table.length) { out.push("<pre>" + escHtml(table.join("\n")) + "</pre>"); table = []; } };
+  for (const line of md.split("\n")) {
+    if (line.startsWith("```")) {
+      if (inCode) { out.push("<pre>" + escHtml(code.join("\n")) + "</pre>"); code = []; inCode = false; }
+      else { endList(); endTable(); inCode = true; }
+      continue;
+    }
+    if (inCode) { code.push(line); continue; }
+    if (line.startsWith("|")) { endList(); table.push(line); continue; }
+    endTable();
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) { endList(); const tag = "h" + (h[1].length + 1); out.push("<" + tag + ">" + mdInline(h[2]) + "</" + tag + ">"); continue; }
+    const li = line.match(/^\s*[-*]\s+(.*)$/);
+    if (li) { if (!list) { out.push("<ul>"); list = true; } out.push("<li>" + mdInline(li[1]) + "</li>"); continue; }
+    endList();
+    if (line.trim() === "") continue;
+    out.push("<p>" + mdInline(line) + "</p>");
+  }
+  endList(); endTable();
+  if (inCode) out.push("<pre>" + escHtml(code.join("\n")) + "</pre>");
+  return out.join("\n");
+}
+function renderDocList() {
+  const box = $("doc-list"); box.textContent = "";
+  for (const d of DOCS) {
+    const b = document.createElement("button");
+    b.className = "btn ghost"; b.style.cssText = "display:block;margin-top:8px;text-align:left";
+    b.textContent = d.title;
+    b.onclick = () => openDoc(d);
+    box.append(b);
+  }
+}
+async function openDoc(d) {
+  $("doc-card").hidden = false;
+  $("doc-title").textContent = d.title;
+  $("doc-source").textContent = "Source: " + REPO_WEB + d.path + " · loading…";
+  $("doc-body").textContent = "Loading from GitHub…";
+  try {
+    const r = await fetch(REPO_RAW + d.path, { cache: "no-store" });
+    if (!r.ok) throw new Error("GitHub returned HTTP " + r.status);
+    $("doc-body").innerHTML = renderMd(await r.text());
+    $("doc-source").textContent = "Source: " + REPO_WEB + d.path + " · fetched " + new Date().toLocaleString();
+  } catch (e) {
+    $("doc-body").textContent = "Could not load this document from GitHub: " + errText(e);
+  }
+  $("doc-card").scrollIntoView({ behavior: "smooth" });
+}
+$("doc-close").onclick = () => { $("doc-card").hidden = true; };
+renderDocList();
 </script>
 </body>
 </html>
