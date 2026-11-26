@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" data-theme="dark"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reqo Demo</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0a0c0b;color:#f2f5f3;font:15px system-ui;padding:16px 16px 90px}main{max-width:760px;margin:auto}header,.row{display:flex;align-items:center;gap:12px;justify-content:space-between}header{padding:8px 0 20px}h1{font-size:25px}h2{margin:0 0 10px}p{color:#a1aaa5;line-height:1.5}.card{background:#13161a;border:1px solid #30363a;border-radius:20px;padding:20px;margin:12px 0}.tag{color:#c6ff1a;font-size:12px;font-weight:800;letter-spacing:1px}.muted{color:#a1aaa5;font-size:13px}button,input,select{font:inherit;border-radius:12px;padding:12px;border:1px solid #3b4440}button{background:#c6ff1a;color:#0a0c0b;font-weight:750;cursor:pointer}button.secondary{background:#1a1e22;color:#f2f5f3}input,select{background:#0a0c0b;color:white;width:100%;margin:6px 0 12px}nav{position:fixed;bottom:0;left:0;right:0;background:#13161a;border-top:1px solid #30363a;display:flex;justify-content:center;gap:6px;padding:12px;flex-wrap:wrap}nav button{background:#1a1e22;color:white;font-size:12px}.active{outline:2px solid #c6ff1a}.balance{font-size:30px;font-weight:850}.log{border-bottom:1px solid #30363a;padding:10px 0}.ok{color:#c6ff1a}.warning{background:#252c15;border:1px solid #56652a;padding:10px;border-radius:12px}.art{height:110px;display:grid;place-items:center;background:linear-gradient(120deg,#263321,#14191c);border-radius:14px;font-size:45px}label{display:block;color:#a1aaa5;font-size:13px}img{max-width:100%;max-height:140px;border-radius:12px}
+</style><main><header><b style="font-size:23px">◉ Reqo</b><span class="tag">SIMULATED DEMO</span><button class="secondary" onclick="reset()">Reset</button></header><div id="app"></div></main><nav id="nav"></nav>
+<script>
+let s,view='home',step=0,photo='';
+const addr='0x1111111111111111111111111111111111119800';
+const token='0x2222222222222222222222222222222222229800';
+const $=id=>document.getElementById(id);
+function reset(){s={connected:false,qor:100,wqor:25,units:0,resT:1000000,resQ:10,events:[],name:'',symbol:'',launched:false};photo='';view='home';step=0;render()}
+function log(t){s.events.unshift(t)}
+function esc(x){return String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function go(v){view=v;render()}
+function card(t){return '<div class="card">'+t+'</div>'}
+function field(id,placeholder,value=''){return '<input id="'+id+'" placeholder="'+placeholder+'" value="'+esc(value)+'">'}
+function val(id){return $(id).value}
+function btn(t,fn){return '<button onclick="'+fn+'">'+t+'</button>'}
+function render(){let h='<div class="warning">Diana testnet · Chain ID 9800 · No live transactions</div>';
+if(view==='home'){h+=card('<div class="tag">WELCOME TO REQO</div><h1>Launch. Trade. Verify.</h1><p>Explore a fully simulated launchpad.</p>'+btn(s.connected?'Wallet connected':'Connect demo wallet',"connect()"));h+=card('<h2>Reqo AI</h2><p>Generate a meme coin idea, verify a contract, or prepare a trade.</p>'+btn('Open Reqo AI',"go('ai')"));h+=card('<h2>Launch a token</h2><p>Create a token on Diana testnet.</p>'+btn('Open launch',"go('launch')"))}
+if(view==='ai'){h+=card('<h2>Reqo AI</h2><p>Helps you create a token</p><div class="log">Hi, I’m Reqo AI. Generate an idea or paste a contract address.</div>'+btn('Generate meme idea',"idea()")+' '+btn('Verify token',"go('verify')")+' '+btn('Buy / sell',"go('trade')"));if(s.name)h+=card('<div class="tag">GENERATED IDEA</div><h2>'+esc(s.name)+' ('+esc(s.symbol)+')</h2><p>Community-powered meme coin. Suggested supply: 1,000,000.</p>'+btn('Use idea in launch',"go('launch')"))}
+if(view==='launch'){h+=card('<h2>Launch a token</h2><p>All fields are local to this demo.</p>'+field('name','Token name',s.name)+field('sym','Ticker',s.symbol)+'<label>Token image (optional)</label><input type="file" accept="image/png,image/jpeg,image/webp" onchange="loadPhoto(this)"><div id="preview">'+(photo?'<img src="'+photo+'">':'')+'</div>'+btn('Launch token',"launch()"))}
+if(view==='verify'){h+=card('<h2>Verify token</h2>'+field('addr','Contract address',token)+btn('Run verification',"verify()"))}
+if(view==='trade'){h+=card('<h2>Trade</h2>'+field('addr','Token contract address',token)+'<select id="side"><option>Buy</option><option>Sell</option></select>'+field('amount','Amount','1')+btn('Review trade',"trade()"))}
+if(view==='wallet'){h+=card('<div class="tag">DEMO WALLET</div><p>'+ (s.connected?addr:'Not connected')+'</p><div class="balance">'+s.qor.toFixed(2)+' QOR</div><p>'+s.wqor.toFixed(2)+' WQOR · '+s.units.toFixed(2)+' '+esc(s.symbol||'TOKEN')+'</p>'+btn('Send QOR',"go('send')")+' '+btn('Receive',"go('receive')"))}
+if(view==='send'){h+=card('<h2>Send QOR</h2>'+field('addr','Recipient 0x address')+field('amount','QOR amount','1')+btn('Simulate send',"send()"))}
+if(view==='receive'){h+=card('<h2>Receive</h2><p>Demo address</p><div class="log">'+addr+'</div><p>Receiving is simulated; no deposit is required.</p>'+btn('Simulate receipt',"receive()"))}
+if(view==='activity'){h+=card('<h2>Activity</h2>'+(s.events.length?s.events.map(x=>'<div class="log">'+esc(x)+'<div class="muted">Simulated · Diana testnet</div></div>').join(''):'<p>No activity yet.</p>'))}
+$('app').innerHTML=h;$('nav').innerHTML=['home','ai','launch','trade','wallet','activity'].map(v=>'<button class="'+(v===view?'active':'')+'" onclick="go(\''+v+'\')">'+v.toUpperCase()+'</button>').join('')}
+function need(){if(!s.connected){alert('Connect demo wallet first');return false}return true}
+function connect(){s.connected=true;log('Demo wallet connected');render()}
+function idea(){s.name='PixelPaw';s.symbol='PAW';render()}
+function loadPhoto(el){let f=el.files[0];if(!f)return;if(f.size>1048576){alert('Maximum 1 MB');return}let r=new FileReader();r.onload=()=>{photo=r.result;$('preview').innerHTML='<img src="'+photo+'">'};r.readAsDataURL(f)}
+function launch(){if(!need())return;let n=val('name').trim(),t=val('sym').trim();if(!n||!t)return alert('Enter name and ticker');if(s.qor<10)return alert('Insufficient demo QOR');s.name=n;s.symbol=t;s.launched=true;s.qor-=10;s.wqor+=0;s.units=0;log('Launched '+n+' ('+t+') · '+token);go('verify')}
+function verify(){if(val('addr').toLowerCase()!==token)return alert('Use the demo contract address');log('Verified '+s.name);render();$('app').innerHTML+=card('<h2 class="ok">Verification successful</h2><p>Demo contract: '+token+'<br>Factory: MemeFactoryV4<br>Network: Diana testnet<br>Post-quantum launch: simulated</p>')}
+function trade(){if(!need())return;let a=Number(val('amount'));if(val('addr').toLowerCase()!==token||!s.launched)return alert('Launch a demo token and use its contract address');if(!(a>0))return alert('Enter a positive amount');let buy=val('side')==='Buy';let k=s.resT*s.resQ;let out=buy?s.resT-k/(s.resQ+a*.997):s.resQ-k/(s.resT+a*.997);if(buy){if(a>s.wqor)return alert('Insufficient WQOR');s.wqor-=a;s.units+=out;s.resQ+=a*.997;s.resT-=out}else{if(a>s.units)return alert('Insufficient token balance');s.units-=a;s.wqor+=out;s.resT+=a*.997;s.resQ-=out}log((buy?'Bought ':'Sold ')+s.symbol+' · '+a+' · output '+out.toFixed(4));go('activity')}
+function send(){if(!need())return;let a=Number(val('amount'));if(!/^0x[0-9a-fA-F]{40}$/.test(val('addr'))||!(a>0)||a>s.qor)return alert('Check address and amount');s.qor-=a;log('Sent '+a+' QOR');go('activity')}
+function receive(){if(!need())return;s.qor+=1;log('Received 1 QOR');go('activity')}
+reset();
+</script></html>
