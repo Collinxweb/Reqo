@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.15.1 design wired: launch preflight, loader -->
+<!-- version: v4.15.2 design wired: trade signs with the accepted payload format -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -1119,13 +1119,14 @@ $("t-go").onclick = async () => {
     const permitDeadline = BigInt(now + 900);
 
     tradeStatus("1 of 3: sign the permit in your wallet (no gas).");
-    const permitSig = ethers.Signature.from(await signer.signTypedData(
-      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES,
-      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline }));
+    const permitRaw = await eth().request({ method: "eth_signTypedData_v4", params: [trader, typedPayload(
+      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES, "Permit",
+      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline })] });
+    const permitSig = ethers.Signature.from(permitRaw);
     tradeStatus("2 of 3: sign the trade request in your wallet (no gas).");
     const poolC = new ethers.Contract(pool, POOL_ABI, reader);
     const poolDomain = { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool };
-    const intentSig = await signer.signTypedData(poolDomain, INTENT_TYPES, intent);
+    const intentSig = await eth().request({ method: "eth_signTypedData_v4", params: [trader, typedPayload(poolDomain, INTENT_TYPES, "Swap", intent)] });
     // Check 1: the contract and this page hash the trade the same way.
     const localHash = ethers.TypedDataEncoder.hash(poolDomain, INTENT_TYPES, intent);
     const onChainHash = await poolC.hashIntent(intent);
@@ -1264,6 +1265,21 @@ document.querySelectorAll("#act-filters .chip").forEach((c) => c.onclick = () =>
   document.querySelectorAll("#act-filters .chip").forEach((x) => x.classList.toggle("on", x === c));
   renderActivity();
 });
+
+// ---- Typed-data payload in the form QoreX accepted in testing ----
+function typedPayload(domain, types, primaryType, message) {
+  const domainTypes = [];
+  if (domain.name !== undefined) domainTypes.push({ name: "name", type: "string" });
+  if (domain.version !== undefined) domainTypes.push({ name: "version", type: "string" });
+  if (domain.chainId !== undefined) domainTypes.push({ name: "chainId", type: "uint256" });
+  if (domain.verifyingContract !== undefined) domainTypes.push({ name: "verifyingContract", type: "address" });
+  const msg = {};
+  for (const f of types[primaryType]) {
+    const v = message[f.name];
+    msg[f.name] = typeof v === "bigint" ? v.toString() : v;
+  }
+  return JSON.stringify({ types: { EIP712Domain: domainTypes, ...types }, primaryType, domain: { ...domain }, message: msg });
+}
 
 // ---- Listing from both factories (V3 launches stay visible) ----
 async function allFactoryTokens() {
