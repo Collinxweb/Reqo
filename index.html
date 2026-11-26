@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.5 design wired: banners, header menu, token descriptions, verify command -->
+<!-- version: v4.16.6 design wired: banner taps, launch and trade pop-ups, redirects -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -125,6 +125,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .slide-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px}
 .slide-dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}
 .slide-dots span.on{background:var(--accent)}
+.slide{pointer-events:none}
+.slide.active{pointer-events:auto}
 </style>
 </head>
 <body>
@@ -987,7 +989,13 @@ $("dlg-sign").onclick = async () => {
     for (const log of rc.logs) { try { const ev = fac.interface.parseLog(log); if (ev && ev.name === "TokenCreated") { token = ev.args.token; pool = ev.args.pool; } } catch (e) {} }
     s3.textContent = "3. Create confirmed. "; s3.append(hlink(tx.hash));
     $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
-    showSuccess("Token launched", (launchDraft ? launchDraft.symbol : "") ? "$" + (launchDraft ? launchDraft.symbol : "") + " is live on Diana." : "Your token is live on Diana.", tx.hash);
+    $("dlg-launch").close();
+    showSuccess("Token launched", "$" + (launchDraft ? launchDraft.symbol : "") + " is live on Diana.", tx.hash, () => {
+      dashTab = "tokens";
+      document.querySelectorAll("#dash-tabs button").forEach((x) => x.classList.toggle("on", x.dataset.dtab === "tokens"));
+      show("dashboard");
+      renderDashboard();
+    });
     logActivity({ kind: "launch", title: "Launched " + launchDraft.name + " ($" + launchDraft.symbol + ")", detail: Number(launchDraft.supply).toLocaleString() + " supply", hash: tx.hash });
     launchDraft = null; launchImageUrl = null;
     resetLaunchForm();
@@ -1237,7 +1245,7 @@ $("t-go").onclick = async () => {
       }
     }
     tradeStatus((buy ? "Bought " : "Sold ") + "$" + t.sym + ". Confirmed:", tx.hash);
-    showSuccess(buy ? "Trade confirmed" : "Sale confirmed", (buy ? "Bought " : "Sold ") + "$" + t.sym + " on Diana.", tx.hash);
+    showSuccess(buy ? "Trade confirmed" : "Sale confirmed", (buy ? "Bought " : "Sold ") + "$" + t.sym + " on Diana.", tx.hash, () => { show("wallet"); loadWallet(); });
     logActivity({ kind: "trade", title: (buy ? "Bought $" : "Sold $") + t.sym, detail: sAmt + (buy ? " QOR" : " $" + t.sym), hash: tx.hash });
     $("t-amount").value = "";
     await loadWallet();
@@ -1646,7 +1654,7 @@ function resetLaunchForm() {
 }
 
 // ---- Success pop-up with the Reqo logo and confetti ----
-function showSuccess(title, sub, hash) {
+function showSuccess(title, sub, hash, next) {
   const old = document.getElementById("success"); if (old) old.remove();
   const wrap = document.createElement("div");
   wrap.id = "success"; wrap.className = "success";
@@ -1663,13 +1671,15 @@ function showSuccess(title, sub, hash) {
   const s2 = document.createElement("div"); s2.className = "success-sub"; s2.textContent = sub;
   card.append(logo, t, s2);
   if (hash) { const h = document.createElement("div"); h.style.cssText = "font-size:12px;word-break:break-all;margin-bottom:12px"; h.append(hlink(hash)); card.append(h); }
+  let done = false;
+  const finish = () => { if (done) return; done = true; wrap.remove(); if (next) next(); };
   const close = document.createElement("button"); close.className = "btn"; close.textContent = "Done"; close.style.margin = "0";
-  close.onclick = () => wrap.remove();
+  close.onclick = finish;
   card.append(close);
   wrap.append(card);
-  wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
+  wrap.onclick = (e) => { if (e.target === wrap) finish(); };
   document.body.append(wrap);
-  setTimeout(() => { if (wrap.isConnected) wrap.remove(); }, 9000);
+  setTimeout(finish, 9000);
 }
 
 // ---- Dashboard banners: three real destinations, rotating every 5 seconds ----
