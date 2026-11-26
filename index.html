@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.15.2 design wired: trade signs with the accepted payload format -->
+<!-- version: v4.15.3 design wired: launch gas limit, loader inside open dialog -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -892,12 +892,12 @@ $("dlg-sign").onclick = async () => {
     }
     setProgress({ ...pg, text: "Step 3 of 3: create the token. Confirm in your wallet." }); const s3 = addStep("3. Create the token: confirm in your wallet");
     try {
-      await fac.createToken.staticCall(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig);
+      await fac.createToken.staticCall(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
     } catch (e) {
-      const why = (e.revert && e.revert.name) || e.reason || e.shortMessage || errText(e);
+      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || e.shortMessage || errText(e);
       throw new Error("the create would revert: " + why);
     }
-    const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig);
+    const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
     s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
     const rc = await tx.wait();
     let token = null, pool = null;
@@ -1365,7 +1365,12 @@ async function loadWallet() {
 }
 
 // ---- Loader: shown while an action runs ----
-function showLoader(text) { $("loader-text").textContent = text || "Working..."; $("loader").hidden = false; }
+function showLoader(text) {
+  const open = document.querySelector("dialog[open]");
+  if (open) open.appendChild($("loader")); else document.body.appendChild($("loader"));
+  $("loader-text").textContent = text || "Working...";
+  $("loader").hidden = false;
+}
 function hideLoader() { $("loader").hidden = true; }
 function withLoader(id, text) {
   const el = $(id); const orig = el.onclick;
