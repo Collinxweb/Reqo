@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.4 design wired: launch reset, success pop-up, wallet holdings, Reqo AI logo and verify chip -->
+<!-- version: v4.16.5 design wired: banners, header menu, token descriptions, verify command -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -113,6 +113,18 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .confetti{position:absolute;width:8px;height:14px;top:-12px;border-radius:2px;opacity:0;animation:fall 1.8s ease-out forwards}
 @keyframes fall{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(420px) rotate(600deg)}}
 @keyframes pop{0%{transform:scale(.3);opacity:0}100%{transform:scale(1);opacity:1}}
+.slides{position:relative;height:176px;border-radius:22px;overflow:hidden;margin-bottom:12px;background:radial-gradient(circle at 88% 18%,rgba(198,255,26,.22),transparent 55%),linear-gradient(135deg,#171b20,#0a0c0b);border:1px solid var(--line);box-shadow:0 0 30px var(--glow)}
+.slide{position:absolute;inset:0;padding:20px 20px 30px;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:0;transform:translateX(24px);transition:opacity .5s,transform .5s;cursor:pointer}
+.slide.active{opacity:1;transform:none}
+.slide-text{flex:1;min-width:0}
+.slide-kicker{color:var(--accent);font-weight:800;font-size:11px;letter-spacing:.6px;text-transform:uppercase}
+.slide-title{color:var(--ink);font-weight:900;font-size:22px;line-height:1.15;margin:4px 0}
+.slide-sub{color:var(--muted);font-size:13px;line-height:1.4}
+.slide-btn{margin-top:10px;padding:8px 14px;border-radius:999px;border:0;background:var(--accent);color:var(--accentInk);font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 0 16px var(--glow)}
+.slide-logo{width:84px;height:84px;border-radius:22px;flex:0 0 84px;box-shadow:0 0 26px var(--glow)}
+.slide-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:6px}
+.slide-dots span{width:7px;height:7px;border-radius:50%;background:var(--line)}
+.slide-dots span.on{background:var(--accent)}
 </style>
 </head>
 <body>
@@ -123,7 +135,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     <div class="brand">REQO</div>
     <div class="sp"></div>
     <button class="icon-btn" id="themeBtn" title="Theme" aria-label="Toggle theme"></button>
-    <button class="pill" id="connectBtn">Connect wallet</button>
+    <button class="icon-btn" id="menu-btn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <button class="pill" id="connectBtn" style="padding:9px 12px;font-size:13px">Connect</button>
   </header>
 
   <!-- LAUNCH -->
@@ -162,15 +175,35 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
   <!-- DASHBOARD -->
   <section id="view-dashboard" hidden>
-    <div class="card" style="padding:18px">
-      <div style="display:flex;align-items:center;gap:12px">
-        <img src="logo.png" alt="" style="width:44px;height:44px;border-radius:12px">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:900;font-size:24px">Dashboard</div>
-          <div class="muted small">Your tokens, all in one place.</div>
+    <div class="slides" id="slides">
+      <div class="slide active" data-go="ai">
+        <div class="slide-text">
+          <div class="slide-kicker">Reqo AI</div>
+          <div class="slide-title">Your Web3 copilot</div>
+          <div class="slide-sub">Draft a token, check it, or verify a token's post-quantum launch on-chain.</div>
+          <button class="slide-btn">Chat with Reqo AI</button>
         </div>
-        <button class="icon-btn" id="menu-btn" aria-label="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+        <img src="logo.png" alt="" class="slide-logo">
       </div>
+      <div class="slide" data-go="wallet">
+        <div class="slide-text">
+          <div class="slide-kicker">Wallet</div>
+          <div class="slide-title">Send &amp; receive</div>
+          <div class="slide-sub">Send and receive QOR and Reqo tokens on QoreChain Diana testnet.</div>
+          <button class="slide-btn">Open wallet</button>
+        </div>
+        <img src="logo.png" alt="" class="slide-logo">
+      </div>
+      <div class="slide" data-go="launch">
+        <div class="slide-text">
+          <div class="slide-kicker">Launch</div>
+          <div class="slide-title">Create a token</div>
+          <div class="slide-sub">Each launch is signed with your quantum-safe key in QoreX.</div>
+          <button class="slide-btn">Launch a token</button>
+        </div>
+        <img src="logo.png" alt="" class="slide-logo">
+      </div>
+      <div class="slide-dots"><span class="on"></span><span></span><span></span></div>
     </div>
     <div class="seg" id="dash-tabs" style="margin:12px 0"><button class="on" data-dtab="tokens">Tokens</button><button data-dtab="launches">Launches</button><button data-dtab="activity">Activity</button></div>
     <div class="card" style="padding:14px">
@@ -909,7 +942,7 @@ $("dlg-sign").onclick = async () => {
     const fullMsg = await fac.messageFor(addr, nonce, deadline, launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description);
     const data = ethers.dataSlice(fullMsg, 33); // QoreX adds the "qorechain-msg-v1|qorechain-diana|" prefix itself
     const [registered, algId, registeredKey, proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(addr);
-    if (!registered || Number(algId) !== 1 || !proven) throw new Error("Your key is not registered and proven. Register it in QoreX first.");
+    if (!registered || Number(algId) !== 1 || !proven) throw new Error("The connected account " + addr + " has no registered, proven key. Register it in QoreX, or connect the account that is registered.");
     const qs = await window.qorex.native.signArbitrary("qorechain-diana", qorNative, ethers.getBytes(data));
     if (!qs || !qs.pq || !qs.pq.signature) throw new Error("QoreX returned no post-quantum signature.");
     const pqSig = ethers.hexlify(Uint8Array.from(atob(qs.pq.signature), (c) => c.charCodeAt(0)));
@@ -1443,31 +1476,31 @@ $("menu-btn").onclick = () => show("settings");
 // ---- Dashboard (v4.16.1): tokens, launches and activity, all read live ----
 function dashRow(r) {
   const row = document.createElement("div");
-  row.className = "tok-row"; row.style.cursor = "pointer";
+  row.className = "tok-row"; row.style.cursor = "pointer"; row.style.alignItems = "flex-start";
   row.onclick = () => openTradeFor(r.addr);
   const av = document.createElement("div"); av.className = "avatar";
+  av.style.width = "56px"; av.style.height = "56px"; av.style.flex = "0 0 56px";
   setAvatar(av, r.img, (r.symbol || "?")[0], r.symbol);
   const meta = document.createElement("div"); meta.className = "tok-meta";
-  const nm = document.createElement("div"); nm.className = "tok-name";
-  nm.textContent = r.name + " ";
+  const nm = document.createElement("div"); nm.className = "tok-name"; nm.style.whiteSpace = "normal";
+  nm.textContent = r.name;
   const pq = document.createElement("span"); pq.className = "badge" + (r.pqc ? " good" : "");
-  pq.textContent = r.pqc ? "PQC launch" : "Legacy";
+  pq.textContent = r.pqc ? "PQC launch" : "Legacy"; pq.style.marginLeft = "6px";
   nm.append(pq);
-  if (r.mine) { const m = document.createElement("span"); m.className = "badge"; m.textContent = " Your token"; nm.append(" ", m); }
-  const sub = document.createElement("div"); sub.className = "tok-sub";
-  sub.textContent = "$" + r.symbol + " · " + short(r.addr);
-  meta.append(nm, sub);
-  const mkt = document.createElement("div"); mkt.style.textAlign = "right"; mkt.style.minWidth = "84px";
-  const ml = document.createElement("div"); ml.className = "tok-val"; ml.textContent = "Market data";
-  const mv = document.createElement("div"); mv.className = "tok-sub"; mv.textContent = "Unavailable";
-  mkt.append(ml, mv);
+  if (r.mine) { const m = document.createElement("span"); m.className = "badge"; m.textContent = "Your token"; m.style.marginLeft = "6px"; nm.append(m); }
+  const sym = document.createElement("div"); sym.className = "tok-sub";
+  sym.textContent = "$" + r.symbol + " · " + short(r.addr);
+  const d = document.createElement("div");
+  d.style.cssText = "font-size:13px;line-height:1.45;margin-top:6px;word-break:break-word";
+  d.textContent = r.desc || "No description.";
+  meta.append(nm, sym, d);
   const copy = document.createElement("button"); copy.className = "icon-btn";
   copy.setAttribute("aria-label", "Copy address"); copy.innerHTML = COPY_SVG;
   copy.onclick = (ev) => {
     ev.stopPropagation();
     navigator.clipboard.writeText(r.addr).then(() => toast("Address copied")).catch(() => toast("Copy failed"));
   };
-  row.append(av, meta, mkt, copy);
+  row.append(av, meta, copy);
   return row;
 }
 function dashActivity() {
@@ -1501,7 +1534,7 @@ async function renderDashboard() {
       const [symbol, name, desc, creator] = await Promise.all([
         c.symbol(), c.name(), c.description().catch(() => ""), c.creator().catch(() => ethers.ZeroAddress)
       ]);
-      return { addr: t.addr, symbol, name, img: imgFrom(desc), pqc: t.factory === FACTORY_V4,
+      return { addr: t.addr, symbol, name, desc: desc.replace(/\s*img:\S+/, "").trim(), img: imgFrom(desc), pqc: t.factory === FACTORY_V4,
                mine: !!me && creator.toLowerCase() === me.toLowerCase() };
     }));
     const shown = dashTab === "launches" ? rows.filter((r) => r.mine) : rows;
@@ -1577,9 +1610,15 @@ async function chainVerify(text) {
     return true;
   }
   const m = t.match(/0x[0-9a-fA-F]{40}/);
-  if (m && /verify|check/i.test(t)) {
+  const onlyAddress = /^0x[0-9a-fA-F]{40}$/.test(t);
+  if (m && (onlyAddress || /verify|check|pqc/i.test(t))) {
     addMsg("user", t);
     try { await verifyToken(m[0]); } catch (e) { aiCard("Token verification", [["bad", "Chain call failed: " + errText(e)]]); }
+    return true;
+  }
+  if (/^\s*verify\b/i.test(t)) {
+    addMsg("user", t);
+    aiCard("Token verification", [["warn", "Paste the full token address after verify, for example: verify 0xb23E095B1EA613048B257247D6A6BDf1583CED3D"]]);
     return true;
   }
   return false;
@@ -1632,6 +1671,17 @@ function showSuccess(title, sub, hash) {
   document.body.append(wrap);
   setTimeout(() => { if (wrap.isConnected) wrap.remove(); }, 9000);
 }
+
+// ---- Dashboard banners: three real destinations, rotating every 5 seconds ----
+let slideIdx = 0;
+function showSlide(i) {
+  const sl = document.querySelectorAll(".slide");
+  slideIdx = (i + sl.length) % sl.length;
+  sl.forEach((x, k) => x.classList.toggle("active", k === slideIdx));
+  document.querySelectorAll(".slide-dots span").forEach((d, k) => d.classList.toggle("on", k === slideIdx));
+}
+document.querySelectorAll(".slide").forEach((sl) => sl.onclick = () => show(sl.dataset.go));
+setInterval(() => showSlide(slideIdx + 1), 5000);
 </script>
 </body>
 </html>
