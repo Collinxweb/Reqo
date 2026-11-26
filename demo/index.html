@@ -4,9 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- version: v4.16.7 design wired: swap preflight, redirects, non-blocking loader, live docs -->
-<title>[Demo] Reqo</title>
+<title>Reqo demo (simulated) Reqo</title>
 <link rel="icon" href="logo.png">
-<script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
 <style>
 :root[data-theme="dark"]{--bg:#0a0c0b;--card:#13161a;--card2:#1a1e22;--line:#252a2f;--ink:#f2f5f3;--muted:#8b9590;--accent:#c6ff1a;--accentInk:#0a0c0b;--good:#2bd27a;--bad:#ff6b6b;--glow:rgba(198,255,26,.25)}
 :root[data-theme="light"]{--bg:#f2f5f3;--card:#ffffff;--card2:#f6f9f7;--line:#dbe3de;--ink:#0d1210;--muted:#66716c;--accent:#b5ec00;--accentInk:#0d1210;--good:#14885a;--bad:#c23b3b;--glow:rgba(181,236,0,.35)}
@@ -378,1736 +377,368 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 </div>
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
 <script>
-/* DEMO LAYER: simulates the chain, the injected wallet and QoreX for a walkthrough.
-   The app code below is unchanged. Nothing is sent to a network. */
+/* PURE SIMULATION for the walkthrough. No network, no wallet, no chain library.
+   All state lives in memory. Every value shown is demo data. */
 (() => {
-  const RPC_URL = "https://evm-testnet.qore.host";
-  const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
-  const FAC_V3 = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
-  const FAC_V4 = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
-  const KEY_PRE = "0x0000000000000000000000000000000000000a02";
-  const VER_PRE = "0x0000000000000000000000000000000000000a01";
-  const ONE = 10n ** 18n;
-  const ZERO32 = "0x" + "00".repeat(32);
-  const low = (a) => String(a || "").toLowerCase();
-  const hx = (v) => ethers.toBeHex(v);
-  const rand32 = () => ethers.hexlify(ethers.randomBytes(32));
+  const $ = (id) => document.getElementById(id);
+  const ACCOUNT = "0x421d780796E900f415fEAe2D12169dfdC6Cf31FA";
+  const QOR1 = "qor1ggwhspukayq0g9074ck3y95alhrv7v06mk8pjt";
+  const PRICE = 0.0012; // demo price in QOR per token
+  const short = (a) => a.slice(0, 6) + "…" + a.slice(-4);
+  const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { maximumFractionDigits: d });
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const hex = (n) => Array.from({ length: n }, () => "0123456789abcdef"[Math.random() * 16 | 0]).join("");
+  const COPY = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 
-  // A throwaway key for this page load only. It signs typed data and transactions for the demo wallet.
-  const wallet = ethers.Wallet.createRandom();
-  const ME = wallet.address;
-
-  function bech32(hrp, bytes) {
-    const CH = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-    const polymod = (v) => {
-      const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
-      let c = 1;
-      for (const x of v) { const b = c >> 25; c = ((c & 0x1ffffff) << 5) ^ x; for (let i = 0; i < 5; i++) if ((b >> i) & 1) c ^= G[i]; }
-      return c;
-    };
-    let acc = 0, bits = 0; const d = [];
-    for (const b of bytes) { acc = (acc << 8) | b; bits += 8; while (bits >= 5) { bits -= 5; d.push((acc >> bits) & 31); } }
-    if (bits > 0) d.push((acc << (5 - bits)) & 31);
-    const hrpExp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
-    const pm = polymod(hrpExp.concat(d, [0, 0, 0, 0, 0, 0])) ^ 1;
-    const chk = [0, 1, 2, 3, 4, 5].map((i) => (pm >> (5 * (5 - i))) & 31);
-    return hrp + "1" + d.concat(chk).map((x) => CH[x]).join("");
-  }
-  const QOR1 = bech32("qor", ethers.getBytes(ME));
-  const PUBKEY = ethers.hexlify(ethers.randomBytes(2592));
-
-  // The app's own ABIs, read from the page, so the simulation answers the same functions and events.
-  const frags = [...new Set([...document.documentElement.innerHTML.matchAll(/"((?:function|event|error) [^"\n]+)"/g)].map((m) => m[1]))];
-  const U = new ethers.Interface(frags.filter((f) => { try { new ethers.Interface([f]); return true; } catch (e) { return false; } }));
-
-  // ---- simulated state ----
-  const S = { qor: 42n * ONE + 18n * ONE / 100n, w: {}, bal: {}, allow: {}, tokens: [], pools: {}, reg: { [low(ME)]: true }, nonce: 0, blk: 10717800, txs: {} };
-  const wget = (who) => S.w[low(who)] || 0n;
-  const wset = (who, v) => { S.w[low(who)] = v; };
-  const tbal = (tok, who) => ((S.bal[low(tok)] || {})[low(who)]) || 0n;
-  const tset = (tok, who, v) => { (S.bal[low(tok)] ||= {})[low(who)] = v; };
-  const tokenBy = (a) => S.tokens.find((t) => low(t.addr) === low(a));
-  const cpmm = (inAmt, rIn, rOut) => (inAmt * 997n * rOut) / (rIn * 1000n + inAmt * 997n);
-
-  // Whole-token amounts: supply is in whole tokens, balances are in wei
-  function makeToken(o) {
-    const addr = ethers.Wallet.createRandom().address, pool = ethers.Wallet.createRandom().address;
-    const supply = BigInt(o.supply) * ONE;
-    const t = { addr, pool, name: o.name, sym: o.sym, desc: o.desc || "", creator: o.creator, fac: o.fac, supply };
-    S.tokens.push(t);
-    const creatorBal = (o.creatorBal || 0n) * ONE, meBal = (o.meBal || 0n) * ONE;
-    if (creatorBal) tset(addr, o.creator, creatorBal);
-    if (meBal) tset(addr, ME, meBal);
-    S.pools[low(pool)] = { tok: addr, t: supply - creatorBal - meBal, w: (o.poolW === undefined ? 9n : o.poolW) * ONE };
-    return t;
-  }
-  const OTHER = [0, 1, 2, 3].map(() => ethers.Wallet.createRandom().address);
-  makeToken({ name: "Mesh Relay", sym: "RELAY", supply: 1000000000, fac: FAC_V4, creator: ME, creatorBal: 0n, meBal: 1200000n, desc: "Off-grid mesh messaging for field teams." });
-  makeToken({ name: "Shelter", sym: "SHELTER", supply: 500000000, fac: FAC_V4, creator: OTHER[0], meBal: 250000n, desc: "Emergency supplies, mapped and ready." });
-  makeToken({ name: "REUSE", sym: "REUSE", supply: 200000000, fac: FAC_V4, creator: OTHER[1], desc: "Rewards for repairing and reusing goods." });
-  makeToken({ name: "Patch", sym: "PATCH", supply: 100000000, fac: FAC_V4, creator: OTHER[2], meBal: 8000n, desc: "Repair toolkit for the community." });
-  makeToken({ name: "Dip Panic", sym: "DIP", supply: 10000000, fac: FAC_V3, creator: OTHER[3], meBal: 52000n, desc: "Legacy launch." });
-  makeToken({ name: "Distraction", sym: "DISDOG", supply: 300000000, fac: FAC_V4, creator: OTHER[0], desc: "Distraction-free meme coin for focus-minded traders." });
-  wset(ME, 35n * ONE / 10n);
-
-  // ---- read calls ----
-  function viewValues(to, name, a) {
-    const t = low(to);
-    if (t === low(WQOR)) {
-      if (name === "balanceOf") return [wget(a[0])];
-      if (name === "allowance") return [S.allow[`${t}:${low(a[0])}:${low(a[1])}`] || 0n];
-      if (name === "decimals") return [18n];
-      if (name === "symbol") return ["WQOR"];
-      if (name === "name") return ["Wrapped QOR"];
-      if (name === "nonces") return [0n];
-      return null;
-    }
-    if (t === low(FAC_V3) || t === low(FAC_V4)) {
-      const fac = t === low(FAC_V4) ? FAC_V4 : FAC_V3;
-      const list = S.tokens.filter((x) => x.fac === fac);
-      if (name === "tokenCount") return [BigInt(list.length)];
-      if (name === "tokens") return [list[Number(a[0])] ? list[Number(a[0])].addr : ethers.ZeroAddress];
-      if (name === "poolOf") { const x = tokenBy(a[0]); return [x && x.fac === fac ? x.pool : ethers.ZeroAddress]; }
-      if (name === "creatorOf") { const x = tokenBy(a[0]); return [x && x.fac === fac ? x.creator : ethers.ZeroAddress]; }
-      if (name === "messageFor") {
-        const enc = ethers.AbiCoder.defaultAbiCoder().encode(["address", "uint256", "uint256", "string", "string", "uint256", "string"], a);
-        return [ethers.concat([ethers.toUtf8Bytes("qorechain-msg-v1|qorechain-diana|"), enc])];
-      }
-      return null;
-    }
-    const tok = tokenBy(to);
-    if (tok) {
-      if (name === "name") return [tok.name];
-      if (name === "symbol") return [tok.sym];
-      if (name === "description") return [tok.desc];
-      if (name === "creator") return [tok.creator];
-      if (name === "totalSupply") return [tok.supply];
-      if (name === "decimals") return [18n];
-      if (name === "balanceOf") return [tbal(tok.addr, a[0])];
-      if (name === "allowance") return [S.allow[`${t}:${low(a[0])}:${low(a[1])}`] || 0n];
-      if (name === "nonces") return [0n];
-      return null;
-    }
-    const pool = S.pools[t];
-    if (pool) {
-      if (name === "tokenReserve") return [pool.t];
-      if (name === "wqorReserve") return [pool.w];
-      if (name === "quoteOut") return [a[0] ? cpmm(a[1], pool.w, pool.t) : cpmm(a[1], pool.t, pool.w)];
-      if (name === "hashIntent") return [ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(Array.from(a[0]), (k, v) => (typeof v === "bigint" ? v.toString() : v))))];
-      if (name === "eip712Domain") return ["0x0f", "Reqo Pool", "1", 9800n, to, ZERO32, []];
-      return null;
-    }
-    if (t === low(KEY_PRE) && name === "pqcKeyStatus") return S.reg[low(a[0])] ? [true, 1, PUBKEY, true] : [false, 0, "0x", false];
-    if (t === low(VER_PRE) && name === "pqcVerify") return [true];
-    return null;
-  }
-  const dflt = (p) => {
-    if (p.baseType === "array") return [];
-    if (p.baseType === "tuple") return p.components.map(dflt);
-    if (p.baseType === "bool") return false;
-    if (p.baseType === "address") return ethers.ZeroAddress;
-    if (p.baseType === "string") return "";
-    if (p.baseType === "bytes") return "0x";
-    if (p.baseType === "fixedBytes") return "0x" + "00".repeat(Number(p.type.match(/\d+/)[0]));
-    return 0n;
+  // ---- demo data ----
+  const S = {
+    connected: false,
+    qor: 42.18,
+    holdings: { WQOR: 3.5, RELAY: 1200000, SHELTER: 250000, DIP: 52000, PATCH: 8000 },
+    tokens: [
+      { sym: "RELAY", name: "Mesh Relay", desc: "Off-grid mesh messaging for field teams.", pqc: true, creator: ACCOUNT, addr: "0x5A55ee69668Fda9A27566810366d1397d035b9dd", supply: 1000000000, color: "#2b6cb0", pool: 900000000, poolW: 9 },
+      { sym: "SHELTER", name: "Shelter", desc: "Emergency supplies, mapped and ready.", pqc: true, creator: "0x9C55a1d0a7b4E3c2F8e1D9A6b5c4E3f2A1B07BCd", addr: "0x9C55a1d0a7b4E3c2F8e1D9A6b5c4E3f2A1B07BCd", supply: 500000000, color: "#8a5a2b", pool: 240000000, poolW: 9 },
+      { sym: "REUSE", name: "REUSE", desc: "Rewards for repairing and reusing goods.", pqc: true, creator: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", addr: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", supply: 200000000, color: "#1f7a6d", pool: 180000000, poolW: 9 },
+      { sym: "PATCH", name: "Patch", desc: "Repair toolkit for the community. Each patch is logged.", pqc: true, creator: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", addr: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", supply: 100000000, color: "#3b4450", pool: 92000000, poolW: 9 },
+      { sym: "DIP", name: "Dip Panic", desc: "A meme about buying the dip. Legacy launch.", pqc: false, creator: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", addr: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", supply: 10000000, color: "#c0392b", pool: 9500000, poolW: 9 },
+      { sym: "DISDOG", name: "Distraction", desc: "Distraction-free meme coin for focus-minded traders.", pqc: true, creator: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", addr: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", supply: 300000000, color: "#6d28d9", pool: 270000000, poolW: 9 }
+    ],
+    activity: [],
+    dashTab: "tokens", side: "buy", slide: 0
   };
-  function ethCall(tx) {
-    const parsed = U.parseTransaction({ data: tx.data || tx.input || "0x" });
-    if (!parsed) return "0x";
-    const fr = parsed.fragment;
-    const vals = viewValues(tx.to, fr.name, parsed.args) || fr.outputs.map(dflt);
-    return U.encodeFunctionResult(fr, vals);
-  }
-
-  // ---- writes ----
-  function evLog(address, name, args) {
-    try { const ev = U.getEvent(name); const { data, topics } = U.encodeEventLog(ev, args); return { address, topics, data }; }
-    catch (e) { return null; }
-  }
-  function execute(from, to, data, value) {
-    const logs = [];
-    const t = low(to);
-    const parsed = data && data !== "0x" ? U.parseTransaction({ data, value }) : null;
-    if (!parsed) { if (value > 0n) S.qor -= value; return { logs }; }
-    const n = parsed.name, a = parsed.args;
-    const transfer = (who, to2, amt) => {
-      if (wget(who) < amt) throw new Error("ERC20InsufficientBalance");
-      wset(who, wget(who) - amt); wset(to2, wget(to2) + amt);
-    };
-    if (t === low(WQOR)) {
-      if (n === "deposit") { if (S.qor < value) throw new Error("insufficient funds"); S.qor -= value; wset(from, wget(from) + value); }
-      else if (n === "approve") S.allow[`${t}:${low(from)}:${low(a[0])}`] = a[1];
-      else if (n === "permit") S.allow[`${t}:${low(a[0])}:${low(a[1])}`] = a[2];
-      else if (n === "transfer") transfer(from, a[0], a[1]);
-      else if (n === "withdraw") { if (wget(from) < a[0]) throw new Error("ERC20InsufficientBalance"); wset(from, wget(from) - a[0]); S.qor += a[0]; }
-      else throw new Error("not supported in the demo: " + n);
-      return { logs };
-    }
-    const tok = tokenBy(to);
-    if (tok) {
-      if (n === "approve") S.allow[`${t}:${low(from)}:${low(a[0])}`] = a[1];
-      else if (n === "permit") S.allow[`${t}:${low(a[0])}:${low(a[1])}`] = a[2];
-      else if (n === "transfer") { const cur = tbal(tok.addr, from); if (cur < a[1]) throw new Error("ERC20InsufficientBalance"); tset(tok.addr, from, cur - a[1]); tset(tok.addr, a[0], tbal(tok.addr, a[0]) + a[1]); }
-      else throw new Error("not supported in the demo: " + n);
-      return { logs };
-    }
-    const pool = S.pools[t];
-    if (pool) {
-      if (n !== "swap") throw new Error("not supported in the demo: " + n);
-      const s = a[0], amt = s.amountIn, trader = s.trader, tk = tokenBy(pool.tok);
-      const out = s.buy ? cpmm(amt, pool.w, pool.t) : cpmm(amt, pool.t, pool.w);
-      if (out === 0n) throw new Error("zero output");
-      if (out < s.minOut) throw new Error("slippage: output below minimum");
-      if (s.buy) {
-        if (wget(trader) < amt) throw new Error("ERC20InsufficientBalance");
-        wset(trader, wget(trader) - amt); pool.w += amt; pool.t -= out; tset(tk.addr, trader, tbal(tk.addr, trader) + out);
-      } else {
-        if (tbal(tk.addr, trader) < amt) throw new Error("ERC20InsufficientBalance");
-        tset(tk.addr, trader, tbal(tk.addr, trader) - amt); pool.t += amt; pool.w -= out; wset(trader, wget(trader) + out);
-      }
-      return { logs };
-    }
-    if (t === low(FAC_V4) || t === low(FAC_V3)) {
-      if (n !== "createToken") throw new Error("not supported in the demo: " + n);
-      const [name, sym, supply, desc] = a;
-      if (wget(from) < 10n * ONE) throw new Error("ERC20InsufficientBalance");
-      wset(from, wget(from) - 10n * ONE);
-      const fac = t === low(FAC_V4) ? FAC_V4 : FAC_V3;
-      const tk2 = makeToken({ name, sym, supply: supply.toString(), fac, creator: from, poolW: 10n, desc });
-      const created = evLog(fac, "TokenCreated", [tk2.addr, tk2.pool, from, name, sym, tk2.supply]);
-      if (created) logs.push(created);
-      if (fac === FAC_V4) { const pq = evLog(fac, "PqcVerified", [from, rand32()]); if (pq) logs.push(pq); }
-      return { logs, token: tk2 };
-    }
-    throw new Error("not supported in the demo: call to " + to);
-  }
-  async function sendTx(p) {
-    const from = p.from || ME, to = p.to || null, data = p.data || p.input || "0x";
-    const value = p.value ? BigInt(p.value) : 0n;
-    const { logs } = execute(from, to, data, value);
-    const signed = await wallet.signTransaction({ type: 2, chainId: 9800n, nonce: S.nonce, to: to || undefined, data, value, gasLimit: 900000n, maxFeePerGas: 2000000000n, maxPriorityFeePerGas: 1000000000n });
-    const parsed = ethers.Transaction.from(signed);
-    S.nonce += 1; S.blk += 1;
-    S.txs[parsed.hash] = { parsed, blk: S.blk, bh: rand32(), logs: logs.map((l) => ({ ...l })) };
-    return parsed.hash;
-  }
-  async function signTyped(json) {
-    const p = JSON.parse(json);
-    const types = { ...p.types }; delete types.EIP712Domain;
-    return wallet.signTypedData(p.domain, types, p.message);
-  }
-
-  // ---- JSON-RPC ----
-  const blockOut = () => ({
-    number: hx(S.blk), hash: rand32(), parentHash: rand32(), timestamp: hx(Math.floor(Date.now() / 1000)), nonce: "0x0000000000000000",
-    difficulty: "0x0", gasLimit: hx(30000000n), gasUsed: "0x0", miner: ethers.ZeroAddress, extraData: "0x", baseFeePerGas: hx(1000000000n),
-    transactions: [], uncles: [], logsBloom: "0x" + "00".repeat(256), sha3Uncles: rand32(), stateRoot: rand32(), receiptsRoot: rand32(), transactionsRoot: rand32(), mixHash: rand32(), size: "0x100"
-  });
-  async function rpc(method, params) {
-    switch (method) {
-      case "eth_chainId": return "0x2648";
-      case "net_version": return "9800";
-      case "eth_blockNumber": return hx(S.blk);
-      case "eth_getBalance": return hx(low(params[0]) === low(ME) ? S.qor : 0n);
-      case "eth_getCode": {
-        const a = low(params[0]);
-        const known = a === low(WQOR) || a === low(FAC_V3) || a === low(FAC_V4) || !!tokenBy(a) || !!S.pools[a];
-        return known ? "0x6080" : "0x";
-      }
-      case "eth_getTransactionCount": return hx(low(params[0]) === low(ME) ? S.nonce : 0);
-      case "eth_gasPrice": case "eth_maxPriorityFeePerGas": return hx(1000000000n);
-      case "eth_estimateGas": return hx(400000n);
-      case "eth_call": return ethCall(params[0]);
-      case "eth_getBlockByNumber": return blockOut();
-      case "eth_getLogs": return [];
-      case "eth_getTransactionByHash": {
-        const x = S.txs[params[0]]; if (!x) return null; const p = x.parsed;
-        return { hash: p.hash, nonce: hx(p.nonce), blockHash: x.bh, blockNumber: hx(x.blk), transactionIndex: "0x0", from: p.from, to: p.to, value: hx(p.value), gas: hx(p.gasLimit), gasPrice: hx(p.maxFeePerGas), maxFeePerGas: hx(p.maxFeePerGas), maxPriorityFeePerGas: hx(p.maxPriorityFeePerGas), input: p.data, type: "0x2", chainId: "0x2648", accessList: [], v: hx(p.signature.yParity), r: p.signature.r, s: p.signature.s, yParity: hx(p.signature.yParity) };
-      }
-      case "eth_getTransactionReceipt": {
-        const x = S.txs[params[0]]; if (!x) return null; const p = x.parsed;
-        return {
-          transactionHash: p.hash, transactionIndex: "0x0", blockHash: x.bh, blockNumber: hx(x.blk), from: p.from, to: p.to,
-          cumulativeGasUsed: "0x5208", gasUsed: "0x5208", effectiveGasPrice: hx(p.maxFeePerGas), contractAddress: null,
-          logs: x.logs.map((l, i) => ({ address: l.address, topics: l.topics, data: l.data, blockNumber: hx(x.blk), blockHash: x.bh, transactionHash: p.hash, transactionIndex: "0x0", logIndex: hx(i), removed: false })),
-          logsBloom: "0x" + "00".repeat(256), status: "0x1", type: "0x2"
-        };
-      }
-      case "eth_sendTransaction": return sendTx(params[0]);
-      case "eth_requestAccounts": case "eth_accounts": return [ME];
-      case "wallet_switchEthereumChain": return null;
-      case "eth_signTypedData_v4": return signTyped(params[1]);
-      case "personal_sign": return wallet.signMessage(ethers.getBytes(params[0]));
-      default: throw new Error("not supported in the demo: " + method);
-    }
-  }
-
-  // ---- injected wallet and QoreX ----
-  const provider = { isQoreX: true, isMetaMask: false, request: ({ method, params }) => rpc(method, params || []), on() {}, removeListener() {} };
-  window.ethereum = provider;
-  const info = { uuid: "demo-qorex-0001", name: "QoreX (demo)", icon: "", rdns: "network.qore.qorex" };
-  const announce = () => window.dispatchEvent(new CustomEvent("eip6963:announceProvider", { detail: { info, provider } }));
-  window.addEventListener("eip6963:requestProvider", announce);
-  announce();
-  window.qorex = {
-    native: {
-      enable: async () => true,
-      getKey: async () => ({ bech32Address: QOR1, algorithm: "ml-dsa-87" }),
-      signArbitrary: async (chainId, signer, data) => {
-        const raw = ethers.randomBytes(4627);
-        let bin = ""; for (const b of raw) bin += String.fromCharCode(b);
-        return { signatureType: "ml-dsa-87-hybrid", pq: { algorithmId: 1, signature: btoa(bin) }, classical: { keyType: "eth_secp256k1" } };
-      }
-    }
+  const mine = (t) => t.creator === ACCOUNT;
+  const qorUnits = (t) => (t.sym === "WQOR" ? 1 : PRICE);
+  const poolOf = (sym) => S.tokens.find((t) => t.sym === sym);
+  const quote = (t, side, amt) => {
+    // constant-product quote with the same 0.3% fee shape as the pool
+    const R = t.poolW, T = t.pool;
+    if (side === "buy") { const x = amt * 0.997; return (x * T) / (R + x); }
+    const x = amt * 0.997; return (x * R) / (T + x);
   };
 
-  // ---- network: the RPC and the app's three API routes ----
-  const realFetch = window.fetch.bind(window);
-  const json = (obj) => new Response(JSON.stringify(obj), { status: 200, headers: { "Content-Type": "application/json" } });
-  const lastUserText = (body) => { try { const m = JSON.parse(body).messages; return m[m.length - 1].content || ""; } catch (e) { return ""; } };
-  const AI_LINES = [
+  // ---- navigation ----
+  function show(view) {
+    document.querySelectorAll("section[id^='view-']").forEach((s) => { s.hidden = s.id !== "view-" + view; });
+    document.querySelectorAll("nav button[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === view));
+    if (view === "dashboard") renderDash();
+    if (view === "wallet") renderWallet();
+    if (view === "trade") renderTrade();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+  window.show = show;
+  document.querySelectorAll("nav button[data-view]").forEach((b) => b.onclick = () => show(b.dataset.view));
+  $("menu-btn").onclick = () => show("settings");
+
+  // ---- theme and connect (simulated) ----
+  $("themeBtn").onclick = () => { document.documentElement.dataset.theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; };
+  $("connectBtn").onclick = () => {
+    S.connected = !S.connected;
+    $("connectBtn").textContent = S.connected ? short(ACCOUNT) : "Connect";
+    $("w-addr").textContent = S.connected ? ACCOUNT : "Connect to see your balances";
+    $("w-reg").textContent = S.connected ? "Quantum-safe key registered" : "";
+    renderDash(); renderWallet(); renderTrade();
+    toast(S.connected ? "Connected (simulated)" : "Disconnected");
+  };
+
+  // ---- toast ----
+  let toastTimer = null;
+  function toast(text) {
+    let t = $("toast");
+    t.textContent = text; t.classList.add("show");
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+  }
+
+  // ---- loader and success (UI only) ----
+  function showLoader(text) {
+    const dlg = document.querySelector("dialog[open]");
+    const ld = $("loader");
+    (dlg || document.body).appendChild(ld);
+    $("loader-text").textContent = text; ld.hidden = false;
+  }
+  function hideLoader() { $("loader").hidden = true; }
+  function showSuccess(title, sub, next) {
+    hideLoader();
+    document.querySelectorAll(".success").forEach((x) => x.remove());
+    const wrap = document.createElement("div"); wrap.className = "success";
+    const card = document.createElement("div"); card.className = "success-card";
+    for (let i = 0; i < 26; i++) {
+      const c = document.createElement("span"); c.className = "confetti";
+      c.style.left = Math.random() * 100 + "%"; c.style.animationDelay = Math.random() * 0.4 + "s";
+      c.style.background = i % 3 === 0 ? "var(--ink)" : "var(--accent)"; card.append(c);
+    }
+    const logo = document.createElement("img"); logo.src = "logo.png"; logo.alt = "Reqo"; logo.className = "success-logo";
+    const t = document.createElement("div"); t.className = "success-title"; t.textContent = title + " 🎉";
+    const s2 = document.createElement("div"); s2.className = "success-sub"; s2.textContent = sub;
+    const h = document.createElement("div"); h.className = "small muted"; h.style.wordBreak = "break-all"; h.textContent = "Demo transaction 0x" + hex(64);
+    const done = document.createElement("button"); done.className = "btn"; done.textContent = "Done"; done.style.margin = "0";
+    done.onclick = () => wrap.remove();
+    card.append(logo, t, s2, h, done); wrap.append(card); document.body.append(wrap);
+    setTimeout(() => wrap.isConnected && wrap.remove(), 9000);
+    if (next) next();
+  }
+
+  // ---- dashboard banners ----
+  function setSlide(i) {
+    const sl = document.querySelectorAll(".slide");
+    S.slide = (i + sl.length) % sl.length;
+    sl.forEach((x, k) => x.classList.toggle("active", k === S.slide));
+    document.querySelectorAll(".slides .dots span, .slide-dots span").forEach((d, k) => d.classList.toggle("on", k === S.slide));
+  }
+  document.querySelectorAll(".slide").forEach((sl) => sl.onclick = () => show(sl.dataset.go));
+  setInterval(() => setSlide(S.slide + 1), 5000);
+  $("d-notice").onclick = () => show("wallet");
+
+  // ---- dashboard ----
+  function tokenRow(t) {
+    const row = document.createElement("div"); row.className = "tok-row"; row.style.cursor = "pointer"; row.style.alignItems = "flex-start";
+    const av = document.createElement("div"); av.className = "avatar"; av.style.background = t.color;
+    av.style.width = "56px"; av.style.height = "56px"; av.style.flex = "0 0 56px"; av.textContent = t.sym[0];
+    const meta = document.createElement("div"); meta.className = "tok-meta";
+    const nm = document.createElement("div"); nm.className = "tok-name"; nm.style.whiteSpace = "normal"; nm.textContent = t.name;
+    const b = document.createElement("span"); b.className = "badge" + (t.pqc ? " good" : ""); b.textContent = t.pqc ? "PQC launch" : "Legacy"; b.style.marginLeft = "6px"; nm.append(b);
+    if (mine(t)) { const m = document.createElement("span"); m.className = "badge"; m.textContent = "Your token"; m.style.marginLeft = "6px"; nm.append(m); }
+    const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = "$" + t.sym + " · " + short(t.addr);
+    const d = document.createElement("div"); d.style.cssText = "font-size:13px;line-height:1.45;margin-top:6px;word-break:break-word"; d.textContent = t.desc;
+    meta.append(nm, sub, d);
+    const copy = document.createElement("button"); copy.className = "icon-btn"; copy.innerHTML = COPY; copy.setAttribute("aria-label", "Copy address");
+    copy.onclick = (e) => { e.stopPropagation(); toast("Address copied (demo)"); };
+    row.onclick = () => { S.side = "buy"; show("trade"); $("t-token").value = t.sym; renderTrade(); };
+    row.append(av, meta, copy);
+    return row;
+  }
+  function renderDash() {
+    const list = $("d-list"); list.innerHTML = "";
+    document.querySelectorAll("#dash-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.dtab === S.dashTab));
+    if (S.dashTab === "activity") {
+      $("d-title").textContent = "Activity"; $("d-count").textContent = "";
+      if (!S.connected) { list.innerHTML = '<div class="muted small">Connect your wallet to see your activity.</div>'; return; }
+      if (!S.activity.length) { list.innerHTML = '<div class="muted small">Transactions you make in Reqo appear here.</div>'; return; }
+      S.activity.slice(0, 20).forEach((a) => { const r = document.createElement("div"); r.className = "tok-row"; r.innerHTML = '<div class="tok-meta"><div class="tok-name"></div><div class="tok-sub"></div></div>'; r.querySelector(".tok-name").textContent = a.title; r.querySelector(".tok-sub").textContent = a.detail + " · " + a.when; list.append(r); });
+      return;
+    }
+    const rows = S.dashTab === "launches" ? S.tokens.filter(mine) : S.tokens;
+    $("d-title").textContent = S.dashTab === "launches" ? "Your launches" : "Tokens on Reqo";
+    $("d-count").textContent = "(" + rows.length + ")";
+    if (!rows.length) { list.innerHTML = '<div class="muted small">' + (S.dashTab === "launches" ? "You have not launched a token yet." : "No tokens yet.") + "</div>"; return; }
+    rows.forEach((t) => list.append(tokenRow(t)));
+  }
+  document.querySelectorAll("#dash-tabs button").forEach((b) => b.onclick = () => { S.dashTab = b.dataset.dtab; renderDash(); });
+  $("d-refresh").onclick = () => { renderDash(); toast("Up to date (demo)"); };
+
+  // ---- launch ----
+  function updateLimit() { $("l-count").textContent = $("l-desc").value.length + " / 280"; }
+  $("l-desc").addEventListener("input", updateLimit);
+  $("l-review").onclick = () => {
+    const n = $("l-name").value.trim(), s = $("l-symbol").value.trim().toUpperCase(), sup = $("l-supply").value.trim();
+    const dlg = $("dlg-launch");
+    if (!n || !s || !sup) { toast("Fill in name, ticker and supply"); return; }
+    $("dlg-fields").textContent = n + " · $" + s + " · " + fmt(sup, 0) + " supply";
+    $("dlg-ready").textContent = S.connected ? "Ready to sign in QoreX (demo)." : "Connect your wallet to launch.";
+    $("dlg-noimg").checked = false;
+    $("dlg-noimg-wrap").hidden = false;
+    $("dlg-sign").disabled = !S.connected;
+    $("dlg-result").textContent = "";
+    $("dlg-steps").textContent = "";
+    dlg.showModal();
+  };
+  $("dlg-close").onclick = () => $("dlg-launch").close();
+  $("dlg-sign").onclick = async () => {
+    if (!S.connected) return;
+    const n = $("l-name").value.trim(), s = $("l-symbol").value.trim().toUpperCase(), sup = Number($("l-supply").value.trim());
+    const steps = [["Signing the request in QoreX…", 1400], ["Approving 10 WQOR for the seed…", 1200], ["Creating your token on Diana…", 1600]];
+    $("dlg-sign").disabled = true;
+    for (const [text, ms] of steps) { $("dlg-steps").textContent += "✓ " + text.replace("…", "") + "\n"; showLoader(text); await sleep(ms); }
+    const t = { sym: s, name: n, desc: $("l-desc").value.trim() || "No description.", pqc: true, creator: ACCOUNT, addr: "0x" + hex(40), supply: sup, color: "#c6ff1a", pool: sup * 0.9, poolW: 10 };
+    S.tokens.unshift(t);
+    S.holdings.WQOR = (S.holdings.WQOR || 0) - 10;
+    S.activity.unshift({ title: "Launched $" + s, detail: fmt(sup, 0) + " supply", when: "just now" });
+    $("l-name").value = ""; $("l-symbol").value = ""; $("l-supply").value = ""; $("l-desc").value = ""; updateLimit();
+    $("dlg-launch").close();
+    showSuccess("Token launched", "$" + s + " is live on Diana (demo).", () => { S.dashTab = "tokens"; show("dashboard"); });
+  };
+
+  // ---- trade ----
+  function fillTokens() {
+    const sel = $("t-token"); const keep = sel.value; sel.innerHTML = "";
+    S.tokens.forEach((t) => { const o = document.createElement("option"); o.value = t.sym; o.textContent = "$" + t.sym + ": " + t.name; sel.append(o); });
+    if (keep) sel.value = keep;
+  }
+  function renderTrade() {
+    fillTokens();
+    const t = poolOf($("t-token").value) || S.tokens[0];
+    $("p-logo").style.background = t.color; $("p-logo").textContent = t.sym[0];
+    $("p-title").textContent = t.name + " · $" + t.sym;
+    $("p-price").textContent = "Demo price: " + PRICE + " QOR per token";
+    $("p-tok").textContent = fmt(t.pool, 0) + " $" + t.sym;
+    $("p-wq").textContent = fmt(t.poolW, 2) + " WQOR";
+    $("p-bal").textContent = S.connected ? fmt(S.holdings[t.sym] || 0, 0) + " $" + t.sym : "Connect your wallet";
+    $("t-buy").classList.toggle("on", S.side === "buy"); $("t-sell").classList.toggle("on", S.side === "sell");
+    $("t-bal").textContent = S.connected ? (S.side === "buy" ? fmt(S.qor, 2) + " QOR" : fmt(S.holdings[t.sym] || 0, 0) + " $" + t.sym) : "—";
+    updateTradeQuote();
+  }
+  function updateTradeQuote() {
+    const t = poolOf($("t-token").value) || S.tokens[0];
+    const amt = Number($("t-amount").value || 0);
+    const out = amt ? quote(t, S.side, amt) : 0;
+    $("t-out").textContent = amt ? (S.side === "buy" ? fmt(out, 0) + " $" + t.sym : fmt(out, 4) + " QOR") : "—";
+    $("t-min").textContent = amt ? (S.side === "buy" ? fmt(out * 0.99, 0) + " $" + t.sym : fmt(out * 0.99, 4) + " QOR") : "—";
+  }
+  $("t-buy").onclick = () => { S.side = "buy"; renderTrade(); };
+  $("t-sell").onclick = () => { S.side = "sell"; renderTrade(); };
+  $("t-token").onchange = renderTrade;
+  $("t-amount").oninput = updateTradeQuote;
+  $("t-max").onclick = () => { $("t-amount").value = S.side === "buy" ? (S.qor * 0.5).toFixed(2) : Math.floor((S.holdings[$("t-token").value] || 0) / 2); updateTradeQuote(); };
+  $("t-go").onclick = async () => {
+    if (!S.connected) { $("t-status").textContent = "Connect your wallet first."; return; }
+    const t = poolOf($("t-token").value) || S.tokens[0];
+    const amt = Number($("t-amount").value || 0);
+    if (!amt) { $("t-status").textContent = "Enter an amount."; return; }
+    const out = quote(t, S.side, amt);
+    showLoader("Signing the permit…"); await sleep(1100);
+    showLoader("Signing the swap intent…"); await sleep(1100);
+    showLoader("Trading on Diana…"); await sleep(1500);
+    if (S.side === "buy") { S.qor -= amt; S.holdings[t.sym] = (S.holdings[t.sym] || 0) + out; t.pool -= out; t.poolW += amt; }
+    else { S.holdings[t.sym] -= amt; S.qor += out; t.pool += amt; t.poolW -= out; }
+    S.activity.unshift({ title: (S.side === "buy" ? "Bought" : "Sold") + " $" + t.sym, detail: fmt(amt, 4) + (S.side === "buy" ? " QOR" : " $" + t.sym), when: "just now" });
+    $("t-amount").value = ""; updateTradeQuote(); $("t-status").textContent = "";
+    showSuccess(S.side === "buy" ? "Trade confirmed" : "Sale confirmed", (S.side === "buy" ? "Bought" : "Sold") + " $" + t.sym + " (demo).", () => show("wallet"));
+  };
+
+  // ---- wallet ----
+  function renderWallet() {
+    if (!S.connected) { $("w-total").textContent = "0.00 QOR"; $("w-count").textContent = "Connect a wallet"; $("w-tokens").innerHTML = ""; $("act-list").innerHTML = ""; return; }
+    const items = [{ sym: "QOR", v: S.qor, value: S.qor }, { sym: "WQOR", v: S.holdings.WQOR || 0, value: S.holdings.WQOR || 0 }];
+    Object.entries(S.holdings).forEach(([sym, v]) => { if (sym !== "WQOR" && v > 0) items.push({ sym, v, value: v * PRICE }); });
+    items.filter((i) => i.v > 0).sort((a, b) => b.v - a.v);
+    const held = items.filter((i) => i.v > 0).sort((a, b) => b.value - a.value);
+    const total = held.reduce((s, i) => s + i.value, 0);
+    $("w-total").textContent = fmt(total, 2) + " QOR";
+    $("w-count").textContent = held.length + " held";
+    const box = $("w-tokens"); box.innerHTML = "";
+    held.forEach((i) => {
+      const t = S.tokens.find((x) => x.sym === i.sym);
+      const r = document.createElement("div"); r.className = "tok-row"; r.style.cursor = "default";
+      const av = document.createElement("div"); av.className = "avatar"; av.style.background = t ? t.color : "#3b4450"; av.textContent = i.sym[0];
+      av.style.width = "44px"; av.style.height = "44px"; av.style.flex = "0 0 44px";
+      const meta = document.createElement("div"); meta.className = "tok-meta";
+      meta.innerHTML = '<div class="tok-name"></div><div class="tok-sub"></div>';
+      meta.querySelector(".tok-name").textContent = i.sym;
+      meta.querySelector(".tok-sub").textContent = t ? t.name : (i.sym === "QOR" ? "QoreChain native" : "Wrapped QOR");
+      const amt = document.createElement("div"); amt.style.textAlign = "right";
+      amt.innerHTML = '<div style="font-weight:900"></div><div class="tok-sub"></div>';
+      amt.firstChild.textContent = fmt(i.v, i.v < 10 ? 4 : 0);
+      amt.lastChild.textContent = i.sym === "QOR" || i.sym === "WQOR" ? "" : fmt(i.value, 4) + " QOR";
+      r.append(av, meta, amt); box.append(r);
+    });
+    const act = $("act-list"); act.innerHTML = "";
+    S.activity.slice(0, 20).forEach((a) => { const r = document.createElement("div"); r.className = "tok-row"; r.innerHTML = '<div class="tok-meta"><div class="tok-name"></div><div class="tok-sub"></div></div>'; r.querySelector(".tok-name").textContent = a.title; r.querySelector(".tok-sub").textContent = a.detail + " · " + a.when; act.append(r); });
+  }
+  $("w-recv").onclick = () => toast("Demo receive address: " + (S.connected ? short(ACCOUNT) : "connect first"));
+  $("w-send").onclick = () => {
+    if (!S.connected) { toast("Connect your wallet first"); return; }
+    const sel = $("snd-asset"); sel.innerHTML = "";
+    ["QOR", "WQOR", ...Object.keys(S.holdings).filter((k) => k !== "WQOR" && S.holdings[k] > 0)].forEach((k) => { const o = document.createElement("option"); o.value = k; o.textContent = k; sel.append(o); });
+    $("snd-status").textContent = ""; $("dlg-send").showModal();
+  };
+  $("snd-close").onclick = () => $("dlg-send").close();
+  $("snd-go").onclick = async () => {
+    const asset = $("snd-asset").value, amt = Number($("snd-amt").value || 0);
+    if (!amt || amt > (asset === "QOR" ? S.qor : S.holdings[asset] || 0)) { $("snd-status").textContent = "Not enough balance (demo)."; return; }
+    $("snd-status").textContent = "Sending (demo)…";
+    showLoader("Sending on Diana…"); await sleep(1400);
+    if (asset === "QOR") S.qor -= amt; else S.holdings[asset] -= amt;
+    S.activity.unshift({ title: "Sent " + asset, detail: fmt(amt, 4) + " " + asset, when: "just now" });
+    $("dlg-send").close();
+    showSuccess("Sent", fmt(amt, 4) + " " + asset + " sent (demo).", () => renderWallet());
+  };
+  document.querySelectorAll("#act-filters .chip, [data-f]").forEach((b) => b.onclick = () => toast("Filter: " + b.dataset.f + " (demo)"));
+
+  // ---- Reqo AI ----
+  function bubble(node, who) { const m = document.createElement("div"); m.className = "msg " + who; if (typeof node === "string") m.textContent = node; else m.append(node); $("chat").append(m); $("chat").scrollTop = 1e9; }
+  function checkCard(title, lines) {
+    const box = document.createElement("div");
+    const h = document.createElement("strong"); h.textContent = title; box.append(h);
+    lines.forEach(([k, t]) => { const d = document.createElement("div"); d.className = k; d.textContent = (k === "ok" ? "✓ " : k === "bad" ? "✗ " : "⚠ ") + t; box.append(d); });
+    return box;
+  }
+  const DEMO_TOKENS = {};
+  S.tokens.forEach((t) => { DEMO_TOKENS[t.addr.toLowerCase()] = t; });
+  function verifyCard(addr) {
+    const t = DEMO_TOKENS[addr.toLowerCase()];
+    if (!t) return checkCard("Token verification", [["bad", "Not a Reqo token from either factory."]]);
+    if (!t.pqc) return checkCard("Token verification", [["warn", "Launched through MemeFactoryV3: legacy, no PQC check."], ["ok", "Creator: " + t.creator]]);
+    return checkCard("Token verification", [
+      ["ok", "Launched through MemeFactoryV4, which requires a verified ML-DSA-87 signature."],
+      ["ok", "Creator: " + t.creator],
+      ["ok", "Creator's key is registered on chain."],
+      ["ok", "Algorithm: ML-DSA-87 (id 1)."],
+      ["ok", "Possession of the key is proven."],
+      ["ok", "Key hash: 0x" + hex(16) + "…"],
+      ["warn", "This is the creator's key status now. The launch's own signature is in its transaction."]
+    ]);
+  }
+  const REPLIES = [
     [/meme|idea/i, "Try: \"A frog coin called Croak with 1 million supply, for people who love ponds.\""],
     [/ticker/i, "Short and memorable works best: 3 to 6 letters, and check the Reqo AI warning for existing tickers."],
     [/description/i, "Say what the token is for, who it's for, and one thing that makes it different."],
-    [/buy|sell/i, "Open Trade, pick the token, and enter an amount. Each trade is signed in QoreX."]
+    [/buy|sell/i, "Open Trade, pick the token, and enter an amount. Trades are signed in QoreX."]
   ];
-  window.fetch = async (input, init = {}) => {
-    const url = typeof input === "string" ? input : input.url;
-    if (url.startsWith(RPC_URL)) {
-      const body = JSON.parse(init.body || "{}");
-      const reqs = Array.isArray(body) ? body : [body];
-      const out = [];
-      for (const r of reqs) {
-        try { out.push({ jsonrpc: "2.0", id: r.id, result: await rpc(r.method, r.params || []) }); }
-        catch (e) { out.push({ jsonrpc: "2.0", id: r.id, error: { code: 3, message: e.shortMessage || e.message || String(e) } }); }
-      }
-      return json(Array.isArray(body) ? out : out[0]);
+  async function aiSend(text) {
+    const t = text.trim(); if (!t) return;
+    bubble(t, "user");
+    if (/^\s*verify\b/i.test(t) || /^0x[0-9a-fA-F]{40}$/.test(t)) {
+      const m = t.match(/0x[0-9a-fA-F]{40}/);
+      if (!m) { bubble(checkCard("Token verification", [["warn", "Paste the full token address after verify, for example: verify 0x5A55ee69668Fda9A27566810366d1397d035b9dd"]]), "ai"); return; }
+      const wait = checkCard("Checking the demo chain…", [["ok", "Reading the token and key status (simulated)."]]);
+      bubble(wait, "ai"); await sleep(1200); wait.parentElement.remove();
+      bubble(verifyCard(m[0]), "ai"); return;
     }
-    if (url.startsWith("/api/window")) return json({ qor: QOR1, live: true, remaining_blocks: "16958", remaining_txs: "15", expiry_height: "10777444", max_txs: "15" });
-    if (url.startsWith("/api/account")) return json({ found: true, key_type: "ML-DSA-87 hybrid" });
-    if (url.startsWith("/api/upload")) { const b = JSON.parse(init.body || "{}"); return json({ url: "data:" + b.contentType + ";base64," + b.data }); }
-    if (url.startsWith("/api/agent")) {
-      const t = lastUserText(init.body);
-      const line = AI_LINES.find(([re]) => re.test(t));
-      const reply = line ? line[1] : "I can draft a token, suggest a ticker, or verify a token. Try \"verify\" with a token address.";
-      return json({ reply, message: reply, text: reply, ok: true });
-    }
-    return realFetch(input, init);
-  };
+    await sleep(500);
+    const r = REPLIES.find(([re]) => re.test(t));
+    bubble(r ? r[1] : "I can draft a token, suggest a ticker, or verify a token. Try \"verify\" with a token address.", "ai");
+  }
+  $("ai-send").onclick = () => { const v = $("ai-input").value; $("ai-input").value = ""; aiSend(v); };
+  $("ai-input").onkeydown = (e) => { if (e.key === "Enter") $("ai-send").click(); };
+  document.querySelectorAll("#ai-chips .chip").forEach((c) => c.onclick = () => {
+    if (c.dataset.fill) { $("ai-input").value = c.dataset.fill; $("ai-input").focus(); }
+    else aiSend(c.textContent);
+  });
+  $("ai-attach").onclick = () => toast("Picture uploads are simulated in the demo");
+  bubble("Hi, I'm Reqo AI. I can draft a token, suggest a ticker, or verify a token's launch.", "ai");
 
-  // Visible label, so the simulation is never mistaken for the live network.
+  // ---- settings and documents (bundled copies, cited to the repository) ----
+  const REPO = "https://github.com/Collinxweb/Reqo/blob/main/";
+  const DOCS = [
+    { path: "README.md", title: "README", body: "<h3>Post-quantum scope</h3><p>Reqo's post-quantum authorization applies to launches through <code>MemeFactoryV4</code>. A launch is created only when the creator's registered ML-DSA-87 key signs the exact request.</p><p>MemeFactoryV3 is still deployed and creates tokens without that check. Tokens from it are labelled \"Legacy, no PQC check\" in the app.</p>" },
+    { path: "docs/QCAI-stage1.md", title: "QCAI stage 1 audit", body: "<h3>Verdict</h3><p>High-severity scope issue: the V3 factory creates tokens without the PQC check (F-01). Mitigated in the app with legacy labels; open on-chain.</p><ul><li>F-02 (low): duplicate tickers are allowed.</li><li>F-03 (informational): direct donations to a pool do not change prices.</li></ul><p>No finding allows funds to be taken from the factory or the pools.</p>" },
+    { path: "docs/PROGRESS.md", title: "Progress log", body: "<h3>First live launch on V4</h3><p>Token <code>0xb23E095B1EA613048B257247D6A6BDf1583CED3D</code>, created through MemeFactoryV4 with a QoreX signature checked on-chain.</p><p>Diana checks: <code>pqcVerify</code> returns true for the official vector and false for a tampered message; one call estimates at 311,540 gas.</p>" }
+  ];
+  function renderDocs() {
+    const box = $("doc-list"); box.innerHTML = "";
+    DOCS.forEach((d) => { const b = document.createElement("button"); b.className = "chip"; b.style.display = "block"; b.style.margin = "8px 0 0"; b.style.textAlign = "left"; b.textContent = d.title; b.onclick = () => openDoc(d); box.append(b); });
+  }
+  function openDoc(d) {
+    $("doc-card").hidden = false;
+    $("doc-title").textContent = d.title;
+    $("doc-source").innerHTML = 'Source: <a href="' + REPO + d.path + '" target="_blank" rel="noopener">github.com/Collinxweb/Reqo/blob/main/' + d.path + "</a> · bundled copy for the demo";
+    $("doc-body").innerHTML = d.body;
+    $("doc-card").scrollIntoView({ behavior: "smooth" });
+  }
+  $("doc-close").onclick = () => { $("doc-card").hidden = true; };
+  renderDocs();
+
+  // ---- start ----
   const tag = document.createElement("div");
-  tag.textContent = "Simulated demo: the chain, wallet and QoreX are simulated. No transactions are sent.";
+  tag.textContent = "Simulated demo: no wallet, chain or network is used. Nothing is sent.";
   tag.style.cssText = "font-size:11px;text-align:center;padding:6px 10px;color:#ffb020;letter-spacing:.3px";
   document.body.prepend(tag);
-
-  window.__demo = { rpc, S, ME, U, tokenBy };
+  setSlide(0);
+  show("dashboard");
+  fillTokens();
+  renderTrade();
 })();
 
-</script>
-<script>
-// ---- Wallet selection (EIP-6963 discovery: QoreX, MetaMask, and any other installed wallet) ----
-let walletProviders = [];
-let activeEth = null;
-function eth() { return activeEth || window.ethereum || null; }
-window.addEventListener("eip6963:announceProvider", (e) => {
-  const d = e.detail;
-  if (d && d.info && d.provider && !walletProviders.some((w) => w.info.uuid === d.info.uuid)) walletProviders.push(d);
-});
-window.dispatchEvent(new Event("eip6963:requestProvider"));
-setTimeout(() => {
-  try {
-    const saved = localStorage.getItem("reqo-wallet");
-    const hit = walletProviders.find((w) => w.info.rdns === saved);
-    if (hit) activeEth = hit.provider;
-    else if (walletProviders.length === 1) activeEth = walletProviders[0].provider;
-  } catch (e) {}
-}, 300);
-function chooseWallet(d) {
-  activeEth = d.provider;
-  try { localStorage.setItem("reqo-wallet", d.info.rdns); } catch (e) {}
-  toast("Using " + d.info.name);
-  connectWallet();
-}
-function openWalletPicker() {
-  const box = $("wallet-list");
-  box.textContent = "";
-  for (const d of walletProviders) {
-    const b = document.createElement("button");
-    b.className = "btn ghost"; b.style.marginTop = "8px";
-    b.textContent = d.info.name;
-    b.onclick = () => { $("dlg-wallet").close(); chooseWallet(d); };
-    box.append(b);
-  }
-  $("dlg-wallet").showModal();
-}
-const $ = (id) => document.getElementById(id);
-let dashTab = "tokens"; // declared before any startup call
-const COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
-
-// ---- v4 launch and multi-factory listing ----
-const FACTORY_V3 = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
-const FACTORY_V4 = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
-const FACTORY_LIST = [FACTORY_V3, FACTORY_V4];
-const PQC_KEY_STATUS = "0x0000000000000000000000000000000000000a02";
-const FAC_V4 = [
-  "function createToken(string,string,uint256,string,uint256,uint256,bytes,bytes) returns (address)",
-  "function messageFor(address,uint256,uint256,string,string,uint256,string) view returns (bytes)",
-  "error ERC20InsufficientBalance(address,uint256,uint256)",
-  "error ERC20InsufficientAllowance(address,uint256,uint256)",
-  "error SafeERC20FailedOperation(address)",
-  "error ReentrancyGuardReentrantCall()",
-  "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)"
-];
-const KEY_ABI = ["function pqcKeyStatus(address) view returns (bool, uint8, bytes, bool)"];
-const FAC_LIST_ABI = [
-  "function tokenCount() view returns (uint256)",
-  "function tokens(uint256) view returns (address)",
-  "function poolOf(address) view returns (address)"
-];
-function showErr(msg) { const b = document.getElementById("errbar"); if (!b) return; b.textContent = "Reqo error: " + msg + " (tap to dismiss)"; b.hidden = false; }
-window.addEventListener("error", (e) => showErr(e.message + (e.lineno ? " (line " + e.lineno + ")" : "")));
-window.addEventListener("unhandledrejection", (e) => showErr((e.reason && (e.reason.shortMessage || e.reason.message)) || String(e.reason)));
-if (typeof ethers === "undefined") showErr("The wallet library did not load. Check your connection and reload the page.");
-const sun = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
-const moon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1111.2 3a7 7 0 009.8 9.8z"/></svg>';
-function applyTheme(t) {
-  document.documentElement.dataset.theme = t;
-  try { localStorage.setItem("reqo-theme", t); } catch (e) {}
-  $("themeBtn").innerHTML = t === "dark" ? sun : moon;
-}
-$("themeBtn").onclick = () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
-applyTheme(document.documentElement.dataset.theme || "dark");
-
-function toast(msg, ms) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), ms || 2000); }
-
-const views = ["launch", "trade", "dashboard", "wallet", "ai", "settings"];
-function show(name) {
-  views.forEach((v) => { $("view-" + v).hidden = v !== name; });
-  document.querySelectorAll("nav.bottom button").forEach((b) => b.classList.toggle("on", b.dataset.view === name));
-  try { history.replaceState(null, "", "#" + name); } catch (e) { /* sandboxed previews block history changes; the tab still switches */ }
-  window.scrollTo({ top: 0 });
-}
-document.querySelectorAll("nav.bottom button").forEach((b) => b.onclick = () => show(b.dataset.view));
-show(views.includes(location.hash.slice(1)) ? location.hash.slice(1) : "dashboard");
-
-// Launch: live counter and image preview
-$("l-desc").oninput = () => { $("l-count").textContent = $("l-desc").value.length + " / 280"; };
-$("l-symbol").oninput = () => { $("l-symbol").value = $("l-symbol").value.toUpperCase(); };
-function previewInto(input, imgEl) {
-  const f = input.files[0];
-  if (!f) return false;
-  if (f.size > 1024 * 1024) { toast("Image must be under 1 MB"); input.value = ""; return false; }
-  const url = URL.createObjectURL(f);
-  imgEl.src = url;
-  return true;
-}
-$("l-file").onchange = () => {
-  const f = $("l-file").files[0];
-  if (!f) return;
-  if (f.size > 1024 * 1024) { toast("Image must be under 1 MB"); $("l-file").value = ""; return; }
-  $("l-drop").querySelectorAll("img").forEach((i) => i.remove());
-  const img = document.createElement("img"); img.alt = "Token image";
-  img.src = URL.createObjectURL(f);
-  $("l-drop").prepend(img);
-  $("l-title").textContent = f.name;
-  $("l-hint").textContent = "Tap to change";
-};
-$("l-review").onclick = () => toast("This page did not finish loading. Reload it, then try again.");
-
-// Trade: direction and amount
-let side = "buy";
-function setSide(s) {
-  side = s;
-  $("t-buy").classList.toggle("on", s === "buy");
-  $("t-sell").classList.toggle("on", s === "sell");
-  $("t-from-lbl").textContent = s === "buy" ? "You pay (WQOR)" : "You pay ($CROAK)";
-  $("t-bal").textContent = s === "buy" ? "2.10 WQOR" : "151.16 CROAK";
-}
-$("t-buy").onclick = () => setSide("buy");
-$("t-sell").onclick = () => setSide("sell");
-$("t-amount").oninput = () => {
-  const v = parseFloat($("t-amount").value);
-  const ok = v > 0;
-  $("t-go").disabled = !ok;
-  $("t-go").textContent = ok ? (side === "buy" ? "Buy" : "Sell") : "Enter an amount";
-  $("t-out").textContent = ok ? (side === "buy" ? (v * 50.2).toFixed(2) + " CROAK" : (v * 0.0193).toFixed(4) + " WQOR") : "0.0";
-};
-$("t-max").onclick = () => { $("t-amount").value = side === "buy" ? "2.10" : "151.16"; $("t-amount").dispatchEvent(new Event("input")); };
-$("t-go").onclick = () => toast("This page did not finish loading. Reload it, then try again.");
-
-// Wallet
-
-
-// Reqo AI: chat, chips, image attach
-const chat = $("chat");
-function addMsg(role, text, imgSrc) {
-  const d = document.createElement("div");
-  d.className = "msg " + (role === "user" ? "user" : "ai");
-  d.textContent = text || "";
-  if (imgSrc) { const i = document.createElement("img"); i.src = imgSrc; i.alt = "Attached image"; d.append(i); }
-  chat.append(d);
-  chat.scrollTop = chat.scrollHeight;
-}
-let aiHistory = [];
-const AGENT_URL = "/api/agent";
-async function uploadImageFile(f) {
-  const bytes = new Uint8Array(await f.arrayBuffer());
-  let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-  const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType: f.type, data: btoa(bin) }) });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || "image upload failed");
-  return j.url;
-}
-$("ai-file").onchange = async () => {
-  const f = $("ai-file").files[0];
-  if (!f) return;
-  if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) return toast("Use a PNG, JPEG, or WebP image");
-  if (f.size > 1024 * 1024) { toast("Image must be under 1 MB"); $("ai-file").value = ""; return; }
-  $("ai-thumb").src = URL.createObjectURL(f);
-  $("ai-attach").hidden = false;
-  $("ai-attach-name").textContent = "Uploading...";
-  try {
-    launchImageUrl = await uploadImageFile(f);
-    updateDescLimit();
-    $("ai-attach-name").textContent = f.name + " will be used as your token image";
-    addMsg("ai", "Image received. It will be the token image when you launch. I can't see images, so describe anything it should show in your message.");
-  } catch (e) { launchImageUrl = null; $("ai-attach-name").textContent = "Upload failed: " + errText(e); }
-};
-$("ai-remove").onclick = () => { launchImageUrl = null; $("ai-file").value = ""; $("ai-attach").hidden = true; updateDescLimit(); };
-
-async function applyTrade(tr) {
-  if (!tradeTokens.length) await loadTradeTokens();
-  const want = tr.token;
-  const hit = /^0x[0-9a-fA-F]{40}$/.test(want)
-    ? tradeTokens.findIndex((t) => t.addr.toLowerCase() === want.toLowerCase())
-    : tradeTokens.findIndex((t) => t.sym.toLowerCase() === want.toLowerCase());
-  if (hit < 0) { addMsg("ai", "I couldn't find a Reqo token for " + want + ". Check the ticker or contract address."); return; }
-  $("t-token").value = String(hit);
-  setTradeSide(tr.side === "sell" ? "sell" : "buy");
-  $("t-amount").value = tr.amount;
-  show("trade");
-  await refreshTrade();
-  const t = tradeTokens[hit];
-  addMsg("ai", "Trade ready: " + (tr.side === "sell" ? "sell " + tr.amount + " $" + t.sym + " for QOR" : "buy $" + t.sym + " with " + tr.amount + " QOR") + ". Check the quote on the Trade tab, then tap " + (tr.side === "sell" ? "Sell" : "Buy") + ". Your wallet will ask you to confirm.");
-}
-
-async function applyDraft(d) {
-  $("l-name").value = d.name;
-  $("l-symbol").value = d.symbol;
-  $("l-supply").value = d.supply;
-  $("l-desc").value = d.description;
-  updateDescLimit();
-  const res = await checkDraft(d.name, d.symbol, d.supply, d.description, launchImageUrl);
-  const cm = document.createElement("div");
-  cm.className = "msg ai";
-  cm.append("Reqo AI check");
-  cm.append(checkBox(res));
-  chat.append(cm);
-  if (!launchImageUrl) addMsg("ai", "No picture is attached. Without one, this token launches without an image. Attach a PNG, JPEG or WebP to add one, or confirm the no-picture option in the review.");
-  const box = document.createElement("div");
-  box.className = "msg ai";
-  box.textContent = "I filled in the launch form: " + d.name + " ($" + d.symbol + "). Check it, then sign.";
-  const btn = document.createElement("button");
-  btn.className = "chip on"; btn.textContent = "Open launch review";
-  btn.onclick = () => { show("launch"); $("l-review").click(); };
-  box.append(document.createElement("br"), btn);
-  chat.append(box);
-  chat.scrollTop = chat.scrollHeight;
-}
-
-async function sendAI() {
-  const text = $("ai-input").value.trim();
-  if (!text) return;
-  if (await chainVerify(text)) { $("ai-input").value = ""; return; }
-  $("ai-input").value = "";
-  addMsg("user", text);
-  aiHistory.push({ role: "user", content: text });
-  const wait = document.createElement("div");
-  wait.className = "msg ai"; wait.textContent = "Thinking...";
-  chat.append(wait); chat.scrollTop = chat.scrollHeight;
-  $("ai-send").disabled = true;
-  try {
-    const r = await fetch(AGENT_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: aiHistory, imageAttached: !!launchImageUrl }) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(j.error || ("agent error " + r.status));
-    wait.remove();
-    const reply = j.reply || "";
-    if (reply) { addMsg("ai", reply); aiHistory.push({ role: "assistant", content: reply }); }
-    if (j.draft) applyDraft(j.draft);
-    if (j.trade) applyTrade(j.trade).catch((e) => addMsg("ai", "I could not prepare that trade: " + errText(e)));
-  } catch (e) {
-    wait.textContent = "Reqo AI could not answer: " + errText(e);
-  } finally { $("ai-send").disabled = false; }
-}
-$("ai-send").onclick = sendAI;
-$("ai-input").addEventListener("keydown", (e) => { if (e.key === "Enter") sendAI(); });
-document.querySelectorAll("#ai-chips .chip").forEach((c) => c.onclick = () => { $("ai-input").value = c.textContent; sendAI(); });
-
-// ---- Step 1: Connect and wallet balances (reads the QoreChain Diana testnet) ----
-const RPC = "https://evm-testnet.qore.host";
-const CHAIN_ID = 9800;
-const CHAIN_HEX = "0x2648";
-const FACTORY = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
-const WQOR = "0xF78c2cC7dc1B9ae52403868dD2097732Abfca665";
-const FAC_ABI = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)"];
-const ERC20 = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function description() view returns (string)"];
-const reader = new ethers.JsonRpcProvider(RPC, CHAIN_ID, { staticNetwork: true });
-let me = null;
-const short = (a) => a.slice(0, 6) + "..." + a.slice(-4);
-const fmtUnits = (x) => Number(ethers.formatUnits(x, 18)).toLocaleString(undefined, { maximumFractionDigits: 6 });
-
-async function ensureChain(p) {
-  const net = await p.getNetwork();
-  if (Number(net.chainId) === CHAIN_ID) return;
-  const params = { chainId: CHAIN_HEX, chainName: "QoreChain Diana Testnet", nativeCurrency: { name: "QOR", symbol: "QOR", decimals: 18 }, rpcUrls: [RPC], blockExplorerUrls: ["https://dashboard.qorechain.io"] };
-  let switchErr = null;
-  try { await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]); }
-  catch (e) { switchErr = e; }
-  if (!switchErr) {
-    const after = await p.getNetwork();
-    if (Number(after.chainId) === CHAIN_ID) return;
-  }
-  // Wallets report an unknown or refused switch in different ways, so add the network and switch again.
-  try {
-    await p.send("wallet_addEthereumChain", [params]);
-    await p.send("wallet_switchEthereumChain", [{ chainId: CHAIN_HEX }]).catch(() => {});
-  } catch (addErr) {
-    throw new Error("the wallet would not switch to Diana (" + errText(switchErr || addErr) + "; add network: " + errText(addErr) + ")");
-  }
-  const final = await p.getNetwork();
-  if (Number(final.chainId) !== CHAIN_ID) throw new Error("the wallet is still on chain " + Number(final.chainId) + ", not Diana (9800)");
-}
-
-async function connectWallet() {
-  const provider = eth();
-  if (!provider) return toast("No wallet found. Open Reqo in a wallet browser.", 5000);
-  let step = "asking the wallet for access";
-  try {
-    const p = new ethers.BrowserProvider(provider);
-    await p.send("eth_requestAccounts", []);
-    step = "checking the network";
-    let chainNote = "";
-    try { await ensureChain(p); }
-    catch (e) { chainNote = " The wallet is not on QoreChain Diana (9800). In QoreX, choose QoreChain Diana Testnet, then reconnect before trading."; }
-    step = "reading the account";
-    me = await (new ethers.BrowserProvider(provider)).getSigner().then((x) => x.getAddress());
-    qorNative = null;
-    try { if (provider.isQoreX && window.qorex) { const k = await window.qorex.native.getKey("qorechain-diana"); qorNative = k.bech32Address || null; } } catch (e) {}
-    $("connectBtn").textContent = short(me);
-    await loadWallet();
-    if (typeof refreshTrade === "function") refreshTrade().catch(() => {});
-    toast("Connected: " + short(me) + chainNote, chainNote ? 8000 : 3000);
-  } catch (e) {
-    me = null;
-    toast("Connect stopped while " + step + ": " + errText(e), 7000);
-  }
-}
-$("connectBtn").onclick = () => {
-  if (walletProviders.length > 1 && !activeEth) return openWalletPicker();
-  if (walletProviders.length === 1 && !activeEth) activeEth = walletProviders[0].provider;
-  connectWallet();
-};
-
-function renderTokens(rows) {
-  const box = $("w-tokens");
-  box.textContent = "";
-  for (const r of rows) {
-    const row = document.createElement("div");
-    row.className = "tok-row";
-    const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, r.sym[0] || "?", r.sym);
-    const meta = document.createElement("div"); meta.className = "tok-meta";
-    const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.sym;
-    const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = r.sub;
-    meta.append(nm, sub);
-    const right = document.createElement("div"); right.style.textAlign = "right";
-    const amt = document.createElement("div"); amt.className = "tok-amt"; amt.textContent = fmtUnits(r.bal);
-    const val = document.createElement("div"); val.className = "tok-val"; val.textContent = r.tag;
-    right.append(amt, val);
-    row.append(av, meta, right);
-    box.append(row);
-  }
-}
-
-async function loadRegistration() {
-  const el = $("w-reg");
-  if (!me) { el.textContent = ""; return; }
-  el.textContent = "Checking registration...";
-  try {
-    const r = await fetch("/api/account?qor=" + qorAddress(me));
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) { el.textContent = "Registration status unavailable right now."; return; }
-    el.textContent = j.found
-      ? "Quantum-safe key registered (" + (j.key_type || "hybrid") + "). Trades and sends are protected."
-      : "No key registered yet. Your first QoreX transaction registers it.";
-  } catch (e) { el.textContent = "Registration status unavailable right now."; }
-}
-async function loadWallet() {
-  renderActivity();
-  if (!me) {
-    $("w-total").textContent = "0.00 QOR";
-    $("w-addr").textContent = "Connect your wallet to see your balances";
-    $("w-count").textContent = "Connect a wallet";
-    $("w-tokens").textContent = "";
-    return;
-  }
-  try {
-    $("w-addr").textContent = me;
-    loadRegistration();
-    const qor = await reader.getBalance(me);
-    const rows = [{ sym: "QOR", kind: "native", sub: "Native · QoreChain", bal: qor, tag: "Native" }];
-    const w = new ethers.Contract(WQOR, ERC20, reader);
-    rows.push({ sym: "WQOR", kind: "erc20", addr: WQOR, sub: "Wrapped QOR · quote asset", bal: await w.balanceOf(me), tag: "Quote" });
-    const fac = new ethers.Contract(FACTORY, FAC_ABI, reader);
-    const n = Number(await fac.tokenCount());
-    const tokenRows = await Promise.all(Array.from({ length: n }, (_, i) => i).map(async (i) => {
-      const addr = await fac.tokens(i);
-      const t = new ethers.Contract(addr, ERC20, reader);
-      const [sym, name, bal, desc] = await Promise.all([t.symbol(), t.name(), t.balanceOf(me), t.description().catch(() => "")]);
-      return { sym, kind: "erc20", addr, img: imgFrom(desc), sub: name + " · " + short(addr), bal, tag: name };
-    }));
-    rows.push(...tokenRows);
-    $("w-total").textContent = fmtUnits(qor) + " QOR";
-    $("w-count").textContent = rows.length + " assets";
-    window.walletAssets = rows;
-    renderTokens(rows);
-  } catch (e) {
-    toast("Could not read balances from the chain");
-  }
-}
-
-$("w-recv").onclick = async () => {
-  if (!me) return toast("Connect your wallet first");
-  try { await navigator.clipboard.writeText(me); toast("Address copied"); }
-  catch (e) { toast("Copy failed: select the address and copy it"); }
-};
-
-if (eth()) {
-  try {
-    eth().request({ method: "eth_accounts" }).then((acc) => {
-      if (acc[0]) { me = acc[0]; $("connectBtn").textContent = short(me); loadWallet(); }
-    }).catch(() => {});
-  } catch (e) {}
-  try {
-    const onFn = eth().on;
-    if (typeof onFn === "function") onFn.call(eth(), "accountsChanged", (acc) => {
-      me = acc[0] || null;
-      qorNative = null;
-      $("connectBtn").textContent = me ? short(me) : "Connect wallet";
-      loadWallet();
-    });
-  } catch (e) { /* some wallet providers wrap this property; balances still load on Connect */ }
-}
-setInterval(() => { if (me) loadWallet(); }, 30000);
-
-// ---- Step 2: Launch (three signed transactions) and wallet Send ----
-const API = "https://api-testnet.qore.host";
-const BCH = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
-function bchPolymod(values) {
-  const G = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
-  let chk = 1;
-  for (const v of values) { const b = chk >>> 25; chk = ((chk & 0x1ffffff) << 5) ^ v; for (let i = 0; i < 5; i++) if ((b >> i) & 1) chk ^= G[i]; }
-  return chk;
-}
-let qorNative = null; // QoreX's own qor1 address, read from window.qorex.native
-function qorAddress(evm) {
-  if (qorNative && me && evm.toLowerCase() === me.toLowerCase()) return qorNative;
-  const bytes = (evm.slice(2).match(/../g) || []).map((x) => parseInt(x, 16));
-  const data = []; let acc = 0, bits = 0;
-  for (const v of bytes) { acc = ((acc << 8) | v) & 0xffff; bits += 8; while (bits >= 5) { bits -= 5; data.push((acc >> bits) & 31); } }
-  if (bits > 0) data.push((acc << (5 - bits)) & 31);
-  const hrp = "qor";
-  const exp = [...hrp].map((c) => c.charCodeAt(0) >> 5).concat([0], [...hrp].map((c) => c.charCodeAt(0) & 31));
-  const pm = bchPolymod(exp.concat(data, [0, 0, 0, 0, 0, 0])) ^ 1;
-  const chk = [0, 1, 2, 3, 4, 5].map((i) => (pm >> (5 * (5 - i))) & 31);
-  return hrp + "1" + data.concat(chk).map((d) => BCH[d]).join("");
-}
-async function fetchWindow(addr) {
-  // Served by /api/window (server side) because the browser cannot call the chain REST API directly.
-  const r = await fetch("/api/window?qor=" + qorAddress(addr));
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || ("window check failed (HTTP " + r.status + ")"));
-  return j;
-}
-async function getSigner() {
-  if (!eth()) throw new Error("Open Reqo in a wallet browser");
-  let p = new ethers.BrowserProvider(eth());
-  await p.send("eth_requestAccounts", []);
-  await ensureChain(p);
-  p = new ethers.BrowserProvider(eth());
-  return p.getSigner();
-}
-function hlink(h) {
-  const a = document.createElement("a");
-  a.href = "https://dashboard.qorechain.io/explorer/tx/" + h.toLowerCase();
-  a.target = "_blank"; a.rel = "noopener"; a.textContent = h;
-  a.style.color = "var(--accent)"; a.style.fontWeight = "800";
-  return a;
-}
-function errText(e) { return (e && e.info && e.info.error && e.info.error.message) || (e && e.shortMessage) || (e && e.message) || String(e); }
-
-const SEED = ethers.parseEther("10");
-const WQ_FULL = ["function balanceOf(address) view returns (uint256)", "function allowance(address,address) view returns (uint256)", "function deposit() payable", "function approve(address,uint256) returns (bool)", "function transfer(address,uint256) returns (bool)", "function withdraw(uint256)"];
-const FAC_FULL = ["function createToken(string,string,uint256,string) returns (address)", "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)"];
-let launchImageUrl = null, launchDraft = null;
-
-// Image upload starts when a file is chosen
-$("l-file").addEventListener("change", async () => {
-  const f = $("l-file").files[0];
-  launchImageUrl = null;
-  updateDescLimit();
-  if (!f) return;
-  if (!["image/png", "image/jpeg", "image/webp"].includes(f.type)) { toast("Use a PNG, JPEG, or WebP image"); return; }
-  $("l-hint").textContent = "Uploading...";
-  try {
-    const bytes = new Uint8Array(await f.arrayBuffer());
-    let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-    const r = await fetch("/api/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contentType: f.type, data: btoa(bin) }) });
-    const j = await r.json();
-    if (!r.ok) throw new Error(j.error || "upload failed");
-    launchImageUrl = j.url;
-    updateDescLimit();
-    $("l-hint").textContent = "Image attached";
-  } catch (e) { $("l-hint").textContent = "Upload failed"; toast("Image upload failed: " + errText(e)); }
-});
-
-// ---- Reqo AI check: read-only, runs before the review ----
-async function checkDraft(name, symbol, supply, description, img) {
-  const enc = new TextEncoder();
-  const lines = [];
-  let blocking = false;
-  const full = description + (img ? " img:" + img : "");
-  if (!name || enc.encode(name).length > 32) { lines.push(["bad", "Name must be 1 to 32 bytes."]); blocking = true; }
-  else lines.push(["ok", "Name is within the limit."]);
-  if (!/^[A-Za-z0-9]{1,10}$/.test(symbol)) { lines.push(["bad", "Ticker must be 1 to 10 letters or digits."]); blocking = true; }
-  else lines.push(["ok", "Ticker format is valid."]);
-  if (!/^\d+$/.test(supply) || BigInt(supply) < 1n || BigInt(supply) > 1000000000000n) { lines.push(["bad", "Supply must be a whole number from 1 to 1,000,000,000,000."]); blocking = true; }
-  else lines.push(["ok", "Supply is within the limit."]);
-  if (enc.encode(full).length > 280) { lines.push(["bad", "Description plus the image link is over 280 bytes."]); blocking = true; }
-  else lines.push(["ok", "Description fits the 280-byte limit."]);
-  try {
-    if (!tradeTokens.length) await loadTradeTokens();
-    const sameTicker = tradeTokens.find((t) => t.sym.toLowerCase() === symbol.toLowerCase());
-    const sameName = tradeTokens.find((t) => t.name.toLowerCase() === name.toLowerCase());
-    lines.push(sameTicker ? ["warn", "$" + symbol + " is already used by " + sameTicker.name + ". Tickers can repeat, so make sure yours is clearly different."] : ["ok", "$" + symbol + " is not used on Reqo yet."]);
-    lines.push(sameName ? ["warn", "A token named " + name + " already exists on Reqo."] : ["ok", "No token on Reqo has this name."]);
-  } catch (e) { lines.push(["warn", "Could not check existing tokens right now."]); }
-  lines.push(img ? ["ok", "Picture attached: it will be the token image."] : ["warn", "No picture. This token will launch without an image."]);
-  return { lines, blocking };
-}
-function checkBox(res) {
-  const box = document.createElement("div");
-  const color = { ok: "var(--good)", warn: "#e0a800", bad: "var(--bad)" };
-  const mark = { ok: "\u2713 ", warn: "\u26a0 ", bad: "\u2717 " };
-  for (const [kind, text] of res.lines) {
-    const row = document.createElement("div");
-    row.style.cssText = "font-size:13px;padding:3px 0;color:" + color[kind];
-    row.textContent = mark[kind] + text;
-    box.append(row);
-  }
-  return box;
-}
-function renderCheck(target, res) { target.textContent = ""; target.append(checkBox(res)); }
-function updateSignGate() {
-  const c = window.launchCheck || { ok: false, blocking: true };
-  const noImg = !launchImageUrl;
-  $("dlg-sign").disabled = !c.ok || c.blocking || !isQoreXWallet() || (noImg && !$("dlg-noimg").checked);
-}
-$("dlg-noimg").onchange = updateSignGate;
-
-function isQoreXWallet() { const p = eth(); return !!(p && p.isQoreX); }
-async function readiness() {
-  const qor = await reader.getBalance(me);
-  const viaQoreX = isQoreXWallet();
-  let win = null, winErr = null;
-  if (!viaQoreX) { try { win = await fetchWindow(me); } catch (e) { winErr = e.message || String(e); } }
-  const open = viaQoreX || !!(win && win.live);
-  const enough = qor >= ethers.parseEther("10.5");
-  return { ok: open && enough, text: "Account " + qorAddress(me) + ": " + (winErr ? "could not check the window (" + winErr + "). Try again in a moment." : viaQoreX ? "QoreX opens the window inside its approval." : open ? "window open." : "no open window for this account. Open the window in QoreX for this account, then tap Review launch again.") + " " + (enough ? "Balance ok." : "Needs about 10.5 QOR; get test QOR from the QoreChain Faucet.") };
-}
-
-$("dlg-wallet-close").onclick = () => $("dlg-wallet").close();
-$("l-review").onclick = async () => {
-  if (!me) return toast("Connect your wallet first");
-  const enc = new TextEncoder();
-  const name = $("l-name").value.trim();
-  const symbol = $("l-symbol").value.trim().toUpperCase();
-  const supply = $("l-supply").value.replace(/[, ]/g, "");
-  const desc = $("l-desc").value.trim();
-  if (!name || enc.encode(name).length > 32) return toast("Name must be 1 to 32 characters");
-  if (!/^[A-Z0-9]{1,10}$/.test(symbol)) return toast("Ticker must be 1 to 10 letters or digits");
-  if (!/^\d+$/.test(supply) || BigInt(supply) < 1n || BigInt(supply) > 1000000000000n) return toast("Supply must be a whole number from 1 to 1,000,000,000,000");
-  const full = desc + (launchImageUrl ? (desc ? " " : "") + "img:" + launchImageUrl : "");
-  if (enc.encode(full).length > 280) return toast("Description plus the image link is too long. Shorten the description.");
-  launchDraft = { name, symbol, supply, description: full };
-  const list = $("dlg-fields"); list.textContent = "";
-  for (const [k, v] of [["Name", name], ["Ticker", "$" + symbol], ["Supply", Number(supply).toLocaleString() + " tokens"], ["Description", desc || "None"], ["Image", launchImageUrl ? "Attached" : "None"]]) {
-    const dt = document.createElement("dt"); dt.textContent = k;
-    const dd = document.createElement("dd"); dd.textContent = v;
-    list.append(dt, dd);
-  }
-  $("dlg-steps").textContent = ""; $("dlg-result").textContent = "";
-  $("dlg-ready").textContent = "Checking your account...";
-  $("dlg-sign").disabled = true;
-  $("dlg-launch").showModal();
-  const rd = await readiness();
-  $("dlg-ready").textContent = rd.text;
-  const chk = await checkDraft(name, symbol, supply, desc, launchImageUrl);
-  renderCheck($("dlg-check"), chk);
-  $("dlg-noimg-wrap").hidden = !!launchImageUrl;
-  window.launchCheck = { ok: rd.ok, blocking: chk.blocking };
-  updateSignGate();
-};
-$("dlg-close").onclick = () => $("dlg-launch").close();
-
-function addStep(text, bad) { const d = document.createElement("div"); d.className = "step" + (bad ? " bad" : ""); d.textContent = text; $("dlg-steps").append(d); return d; }
-
-$("dlg-sign").onclick = async () => {
-  if (!launchDraft) return;
-  const btn = $("dlg-sign"); btn.disabled = true;
-  $("dlg-steps").textContent = ""; $("dlg-result").textContent = "";
-  const pg = { name: launchDraft.name, symbol: launchDraft.symbol };
-  setProgress({ ...pg, text: "Starting..." });
-  try {
-    const signer = await getSigner();
-    const addr = await signer.getAddress();
-    const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
-    const fac = new ethers.Contract(FACTORY_V4, FAC_V4, signer);
-    // v4 launch: QoreX signs the request with the account's ML-DSA-87 key.
-    if (!isQoreXWallet() || !window.qorex || !window.qorex.native || !qorNative) throw new Error("Launching needs QoreX, which signs with your quantum-safe key. Connect QoreX.");
-    const nonce = BigInt(Date.now());
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-    const supplyN = BigInt(launchDraft.supply);
-    const fullMsg = await fac.messageFor(addr, nonce, deadline, launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description);
-    const data = ethers.dataSlice(fullMsg, 33); // QoreX adds the "qorechain-msg-v1|qorechain-diana|" prefix itself
-    const [registered, algId, registeredKey, proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(addr);
-    if (!registered || Number(algId) !== 1 || !proven) throw new Error("The connected account " + addr + " has no registered, proven key. Register it in QoreX, or connect the account that is registered.");
-    const qs = await window.qorex.native.signArbitrary("qorechain-diana", qorNative, ethers.getBytes(data));
-    if (!qs || !qs.pq || !qs.pq.signature) throw new Error("QoreX returned no post-quantum signature.");
-    const pqSig = ethers.hexlify(Uint8Array.from(atob(qs.pq.signature), (c) => c.charCodeAt(0)));
-
-    const bal = await wq.balanceOf(addr);
-    if (bal < SEED) {
-      setProgress({ ...pg, text: "Step 1 of 3: wrap QOR into WQOR. Confirm in your wallet." }); const s1 = addStep("1. Wrap QOR into WQOR: confirm in your wallet");
-      const tx = await wq.deposit({ value: SEED - bal });
-      s1.textContent = "1. Wrap submitted. "; s1.append(hlink(tx.hash));
-      await tx.wait(); s1.textContent = "1. Wrap confirmed. "; s1.append(hlink(tx.hash));
-    }
-    const al = await wq.allowance(addr, FACTORY_V4);
-    if (al < SEED) {
-      setProgress({ ...pg, text: "Step 2 of 3: approve the factory. Confirm in your wallet." }); const s2 = addStep("2. Approve the factory: confirm in your wallet");
-      const tx = await wq.approve(FACTORY_V4, SEED);
-      s2.textContent = "2. Approve submitted. "; s2.append(hlink(tx.hash));
-      await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
-    }
-    setProgress({ ...pg, text: "Step 3 of 3: create the token. Confirm in your wallet." }); const s3 = addStep("3. Create the token: confirm in your wallet");
-    // Check each piece on its own, so the failing step is named.
-    const rpcErr = (e) => JSON.stringify({ code: e.code, msg: e.shortMessage || e.message, data: e.data, rpc: e.info && e.info.error ? e.info.error : null }).slice(0, 260);
-    const pqcIface = new ethers.Interface(["function pqcVerify(bytes,bytes,bytes) view returns (bool)"]);
-    const keyIface = new ethers.Interface(KEY_ABI);
-    try {
-      await reader.call({ to: PQC_KEY_STATUS, data: keyIface.encodeFunctionData("pqcKeyStatus", [addr]) });
-    } catch (e) { throw new Error("step A, key status call: " + rpcErr(e)); }
-    let verifyRaw;
-    try {
-      verifyRaw = await reader.call({ to: "0x0000000000000000000000000000000000000a01", data: pqcIface.encodeFunctionData("pqcVerify", [registeredKey, pqSig, fullMsg]) });
-    } catch (e) { throw new Error("step B, signature check call: " + rpcErr(e)); }
-    if (!pqcIface.decodeFunctionResult("pqcVerify", verifyRaw)[0]) throw new Error("step B: the chain rejects this signature for this request");
-    try {
-      await fac.createToken.staticCall(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
-    } catch (e) {
-      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || rpcErr(e);
-      throw new Error("step C, create: " + why);
-    }
-    const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
-    s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
-    const rc = await tx.wait();
-    let token = null, pool = null;
-    for (const log of rc.logs) { try { const ev = fac.interface.parseLog(log); if (ev && ev.name === "TokenCreated") { token = ev.args.token; pool = ev.args.pool; } } catch (e) {} }
-    s3.textContent = "3. Create confirmed. "; s3.append(hlink(tx.hash));
-    $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
-    $("dlg-launch").close();
-    showSuccess("Token launched", "$" + (launchDraft ? launchDraft.symbol : "") + " is live on Diana.", tx.hash, () => {
-      dashTab = "tokens";
-      document.querySelectorAll("#dash-tabs button").forEach((x) => x.classList.toggle("on", x.dataset.dtab === "tokens"));
-      show("dashboard");
-      renderDashboard();
-    });
-    logActivity({ kind: "launch", title: "Launched " + launchDraft.name + " ($" + launchDraft.symbol + ")", detail: Number(launchDraft.supply).toLocaleString() + " supply", hash: tx.hash });
-    launchDraft = null; launchImageUrl = null;
-    resetLaunchForm();
-    setProgress(null); loadDashboard().catch(() => {}); loadTradeTokens().catch(() => {});
-    ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
-    $("l-file").value = ""; updateDescLimit(); $("l-hint").textContent = "Tap to choose an image";
-    $("l-drop").querySelectorAll("img").forEach((i) => i.remove()); $("l-title").textContent = "Add a token image";
-    loadWallet().catch(() => {});
-  } catch (e) {
-    addStep("Stopped: " + errText(e), true);
-    setProgress({ ...pg, text: "Stopped: " + errText(e), failed: true });
-    btn.disabled = false;
-  }
-};
-
-// Send
-$("w-send").onclick = () => {
-  if (!me) return toast("Connect your wallet first");
-  const sel = $("snd-asset"); sel.textContent = "";
-  (window.walletAssets || []).forEach((a, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = a.sym + " (" + fmtUnits(a.bal) + ")"; sel.append(o); });
-  $("snd-status").textContent = "";
-  $("dlg-send").showModal();
-};
-$("snd-close").onclick = () => $("dlg-send").close();
-$("snd-go").onclick = async () => {
-  const btn = $("snd-go"); btn.disabled = true;
-  const out = $("snd-status"); out.textContent = "";
-  try {
-    const a = (window.walletAssets || [])[Number($("snd-asset").value)];
-    const to = $("snd-to").value.trim();
-    const sAmt = $("snd-amt").value.trim();
-    if (!a) throw new Error("Choose an asset");
-    if (!ethers.isAddress(to)) throw new Error("Enter a valid 0x recipient address");
-    if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
-    const amt = ethers.parseUnits(sAmt, 18);
-    if (amt > a.bal) throw new Error("Insufficient " + a.sym + ": you have " + fmtUnits(a.bal));
-    if (!isQoreXWallet()) {
-      const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
-      if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then send again.");
-    }
-    const signer = await getSigner();
-    const tx = a.kind === "native" ? await signer.sendTransaction({ to, value: amt }) : await (new ethers.Contract(a.addr, WQ_FULL, signer)).transfer(to, amt);
-    out.textContent = "Submitted: "; out.append(hlink(tx.hash));
-    await tx.wait();
-    out.textContent = "Sent " + sAmt + " " + a.sym + ": "; out.append(hlink(tx.hash));
-    showSuccess("Sent", sAmt + " " + a.sym + " sent.", tx.hash);
-    logActivity({ kind: "sent", title: "Sent " + a.sym, detail: sAmt + " to " + short(to), hash: tx.hash });
-    $("snd-amt").value = "";
-    await loadWallet();
-  } catch (e) { out.textContent = "Stopped: " + errText(e); }
-  finally { btn.disabled = false; }
-};
-
-// ---- Step 3: Trade (user signs a permit and a swap request, then submits swap) ----
-function imgFrom(desc) { const m = /img:(https?:\/\/[^\s]+)/.exec(desc || ""); return m ? m[1] : null; }
-function updateDescLimit() {
-  const enc = new TextEncoder();
-  const link = launchImageUrl ? enc.encode(" img:" + launchImageUrl).length : 0;
-  const max = Math.max(0, 280 - link);
-  const ta = $("l-desc");
-  ta.maxLength = max;
-  if (ta.value.length > max) { ta.value = ta.value.slice(0, max); toast("Description shortened to leave room for the image link"); }
-  $("l-count").textContent = ta.value.length + " / " + max;
-  $("l-limit").textContent = launchImageUrl ? "Up to " + max + " characters (the image link uses " + link + ")" : "Up to 280 characters";
-}
-$("l-desc").oninput = updateDescLimit;
-
-const TOK_META = ["function name() view returns (string)", "function symbol() view returns (string)", "function description() view returns (string)", "function creator() view returns (address)", "function totalSupply() view returns (uint256)"];
-const FAC_TR = ["function tokenCount() view returns (uint256)", "function tokens(uint256) view returns (address)", "function poolOf(address) view returns (address)"];
-const POOL_ABI = [
-  "function tokenReserve() view returns (uint256)",
-  "function wqorReserve() view returns (uint256)",
-  "function quoteOut(bool buy, uint256 amountIn) view returns (uint256)",
-  "function hashIntent((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s) view returns (bytes32)",
-  "function eip712Domain() view returns (bytes1, string, string, uint256, address, bytes32, uint256[])",
-  "function swap((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 sv) returns (uint256)",
-];
-const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)"];
-const INTENT_TYPES = { Swap: [{ name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
-const PERMIT_TYPES = { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
-let tradeTokens = [], tradeSide = "buy", slipPct = 3, tradeBusy = false, tradeBal = { wqor: null, tok: null, qor: null };
-const GAS_RESERVE = ethers.parseEther("0.2");
-// What the user can spend when buying: QOR plus WQOR they already hold, keeping gas aside.
-function availableFor(buy) {
-  if (buy) return tradeBal.wqor === null ? null : tradeBal.wqor + tradeBal.qor - GAS_RESERVE;
-  return tradeBal.tok;
-}
-const curToken = () => tradeTokens[Number($("t-token").value)];
-function tradeStatus(text, hash) {
-  const el = $("t-status"); el.textContent = text;
-  if (hash) { el.append(" "); el.append(hlink(hash)); }
-}
-
-async function loadTradeTokens() {
-  const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
-  const n = Number(await fac.tokenCount());
-  const all = await Promise.all(Array.from({ length: n }, (_, i) => i).map(async (i) => {
-    const addr = await fac.tokens(i);
-    const pool = await fac.poolOf(addr);
-    if (pool === ethers.ZeroAddress) return null;
-    const t = new ethers.Contract(addr, TOK_META, reader);
-    const [sym, name, desc] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => "")]);
-    return { addr, pool, sym, name, img: imgFrom(desc) };
-  }));
-  const out = all.filter(Boolean);
-  tradeTokens = out;
-  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
-  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
-  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name + (t.legacy ? " (legacy)" : ""); sel.append(o); });
-  if (keep && Number(keep) < out.length) sel.value = keep;
-  await refreshTrade();
-}
-
-async function refreshTrade() {
-  const t = curToken(); if (!t) return;
-  const pc = new ethers.Contract(t.pool, POOL_ABI, reader);
-  const [tr, wr] = await Promise.all([pc.tokenReserve(), pc.wqorReserve()]);
-  $("p-title").textContent = t.name + " ($" + t.sym + ")";
-  setAvatar($("p-logo"), t.img, t.sym[0], t.sym);
-  $("p-tok").textContent = fmtUnits(tr); $("p-wq").textContent = fmtUnits(wr);
-  $("p-price").textContent = tr > 0n ? fmtUnits(wr * 10n ** 18n / tr) + " WQOR" : "-";
-  if (me) {
-    const [wb, tb] = await Promise.all([new ethers.Contract(WQOR, PERMIT_ABI, reader).balanceOf(me), new ethers.Contract(t.addr, PERMIT_ABI, reader).balanceOf(me)]);
-    const qb = await reader.getBalance(me);
-    tradeBal = { wqor: wb, tok: tb, qor: qb };
-    $("p-bal").textContent = fmtUnits(tb) + " " + t.sym;
-    const avail = tradeSide === "buy" ? (wb + qb > GAS_RESERVE ? wb + qb - GAS_RESERVE : 0n) : tb;
-    $("t-bal").textContent = tradeSide === "buy" ? fmtUnits(avail) + " QOR" : fmtUnits(tb) + " " + t.sym;
-  } else { tradeBal = { wqor: null, tok: null, qor: null }; $("p-bal").textContent = "-"; $("t-bal").textContent = "-"; }
-  $("t-from-lbl").textContent = tradeSide === "buy" ? "You pay (QOR)" : "You pay ($" + t.sym + ")";
-  $("t-recv-lbl").textContent = tradeSide === "buy" ? "You receive ($" + t.sym + ")" : "You receive (QOR)";
-  await tradeQuote();
-}
-
-async function tradeQuote() {
-  const t = curToken(); const go = $("t-go");
-  const s = $("t-amount").value.trim();
-  if (!t) { go.disabled = true; go.textContent = "No token"; return; }
-  if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("t-out").textContent = "0.0"; $("t-min").textContent = ""; go.disabled = !!me; go.textContent = me ? "Enter an amount" : "Connect wallet"; if (!me) go.disabled = false; return; }
-  const buy = tradeSide === "buy";
-  let amountIn;
-  try { amountIn = ethers.parseUnits(s, 18); } catch (e) { go.disabled = true; go.textContent = "Invalid amount"; return; }
-  try {
-    const out = await new ethers.Contract(t.pool, POOL_ABI, reader).quoteOut(buy, amountIn);
-    const min = out * BigInt(100 - slipPct) / 100n;
-    const unit = buy ? t.sym : "QOR";
-    $("t-out").textContent = fmtUnits(out) + " " + unit;
-    $("t-min").textContent = "Minimum you receive: " + fmtUnits(min) + " " + unit + " (" + slipPct + "% max slippage). Fee 0.3%.";
-  } catch (e) { $("t-out").textContent = "Could not quote"; go.disabled = true; return; }
-  const have = availableFor(buy);
-  if (!me) { go.disabled = false; go.textContent = "Connect wallet"; return; }
-  if (have !== null && amountIn > have) { go.disabled = true; go.textContent = "Insufficient balance"; return; }
-  go.disabled = false; go.textContent = buy ? "Buy" : "Sell";
-}
-
-function setTradeSide(sd) {
-  tradeSide = sd;
-  $("t-buy").classList.toggle("on", sd === "buy");
-  $("t-sell").classList.toggle("on", sd === "sell");
-  $("t-amount").value = ""; $("t-status").textContent = "";
-  refreshTrade().catch(() => {});
-}
-$("t-buy").onclick = () => setTradeSide("buy");
-$("t-sell").onclick = () => setTradeSide("sell");
-$("t-token").onchange = () => { $("t-amount").value = ""; refreshTrade().catch(() => {}); };
-$("t-amount").oninput = () => tradeQuote().catch(() => {});
-$("t-max").onclick = () => {
-  const have = availableFor(tradeSide === "buy");
-  if (have === null) return toast("Connect your wallet first");
-  $("t-amount").value = ethers.formatUnits(have, 18);
-  tradeQuote().catch(() => {});
-};
-[[1, "s-1"], [3, "s-3"], [5, "s-5"]].forEach(([pct, id]) => { $(id).onclick = () => { slipPct = pct; ["s-1", "s-3", "s-5"].forEach((x) => $(x).classList.toggle("on", x === id)); tradeQuote().catch(() => {}); }; });
-
-$("t-go").onclick = async () => {
-  if (!me) return connectWallet();
-  if (tradeBusy) return;
-  const t = curToken(); if (!t) return;
-  tradeBusy = true; $("t-go").disabled = true; $("t-status").textContent = "";
-  try {
-    const sAmt = $("t-amount").value.trim();
-    if (!/^\d+(\.\d+)?$/.test(sAmt) || Number(sAmt) <= 0) throw new Error("Enter an amount above zero");
-    const amountIn = ethers.parseUnits(sAmt, 18);
-    const buy = tradeSide === "buy";
-    const have = availableFor(buy);
-    if (have !== null && amountIn > have) throw new Error("Insufficient balance");
-    if (!isQoreXWallet()) {
-      const win = await fetchWindow(me).catch((e) => { throw new Error("could not check the window: " + (e.message || e)); });
-      if (!win.live) throw new Error("No open window for " + qorAddress(me) + ". Open the window in QoreX for this account, then trade again.");
-    }
-    const signer = await getSigner();
-    const trader = await signer.getAddress();
-    const pool = t.pool;
-    if (buy) {
-      const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
-      const wqBal = await wq.balanceOf(trader);
-      if (wqBal < amountIn) {
-        const need = amountIn - wqBal;
-        const qorBal = await reader.getBalance(trader);
-        if (qorBal < need + GAS_RESERVE) throw new Error("Not enough QOR: you need " + fmtUnits(need + GAS_RESERVE) + " QOR including gas.");
-        tradeStatus("Wrap " + fmtUnits(need) + " QOR into WQOR. Confirm in your wallet.");
-        const wtx = await wq.deposit({ value: need });
-        await wtx.wait();
-        tradeStatus("Wrapped " + fmtUnits(need) + " QOR.", wtx.hash);
-      }
-    }
-    const wqBefore = await new ethers.Contract(WQOR, WQ_FULL, reader).balanceOf(trader);
-    const inTok = buy ? WQOR : t.addr;
-    const quote = await new ethers.Contract(pool, POOL_ABI, reader).quoteOut(buy, amountIn);
-    const minOut = quote * BigInt(100 - slipPct) / 100n;
-    const now = Math.floor(Date.now() / 1000);
-    const intent = { trader, buy, amountIn, minOut, nonce: BigInt(Date.now()), deadline: BigInt(now + 900) };
-    const inMeta = new ethers.Contract(inTok, PERMIT_ABI, reader);
-    const [inName, nonce] = await Promise.all([inMeta.name(), inMeta.nonces(trader)]);
-    const permitDeadline = BigInt(now + 900);
-
-    tradeStatus("1 of 3: sign the permit in your wallet (no gas).");
-    const permitRaw = await eth().request({ method: "eth_signTypedData_v4", params: [trader, typedPayload(
-      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES, "Permit",
-      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline })] });
-    const permitSig = ethers.Signature.from(permitRaw);
-    tradeStatus("2 of 3: sign the trade request in your wallet (no gas).");
-    const poolC = new ethers.Contract(pool, POOL_ABI, reader);
-    const poolDomain = { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool };
-    const intentSig = await eth().request({ method: "eth_signTypedData_v4", params: [trader, typedPayload(poolDomain, INTENT_TYPES, "Swap", intent)] });
-    // Check 1: the contract and this page hash the trade the same way.
-    const localHash = ethers.TypedDataEncoder.hash(poolDomain, INTENT_TYPES, intent);
-    const onChainHash = await poolC.hashIntent(intent);
-    if (localHash !== onChainHash) throw new Error("the trade hash differs from the pool's (" + localHash.slice(0, 10) + " vs " + onChainHash.slice(0, 10) + "). The wallet encoded the trade differently.");
-    // Check 2: the signature must come from the trader.
-    const signedBy = ethers.verifyTypedData(poolDomain, INTENT_TYPES, intent, intentSig);
-    if (signedBy.toLowerCase() !== trader.toLowerCase()) throw new Error("the wallet signed the trade as " + short(signedBy) + ", not " + short(trader) + ". The wallet's typed-data signing does not match the pool.");
-    // Check 3: the pool's on-chain domain must match the one signed.
-    const dom = await poolC.eip712Domain();
-    if (dom[1] !== "Reqo Pool" || dom[2] !== "1" || Number(dom[3]) !== CHAIN_ID || dom[4].toLowerCase() !== pool.toLowerCase()) throw new Error("the pool's signing domain is " + dom[1] + " v" + dom[2] + " on chain " + dom[3] + ", not the one this page signs.");
-    tradeStatus("3 of 3: confirm the transaction in your wallet.");
-    const swapArgs = [intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s];
-    try {
-      await new ethers.Contract(pool, POOL_ABI, reader).swap.staticCall(...swapArgs, { from: trader });
-    } catch (e) {
-      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || errText(e);
-      throw new Error("the trade would revert: " + why);
-    }
-    const tx = await new ethers.Contract(pool, POOL_ABI, signer).swap(intent, intentSig, permitDeadline, permitSig.v, permitSig.r, permitSig.s);
-    tradeStatus("Submitted:", tx.hash);
-    await tx.wait();
-    if (!buy) {
-      const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
-      const got = (await wq.balanceOf(trader)) - wqBefore;
-      if (got > 0n) {
-        tradeStatus("Convert " + fmtUnits(got) + " WQOR back to QOR. Confirm in your wallet.");
-        const utx = await wq.withdraw(got);
-        await utx.wait();
-      }
-    }
-    tradeStatus((buy ? "Bought " : "Sold ") + "$" + t.sym + ". Confirmed:", tx.hash);
-    showSuccess(buy ? "Trade confirmed" : "Sale confirmed", (buy ? "Bought " : "Sold ") + "$" + t.sym + " on Diana.", tx.hash, () => { show("wallet"); loadWallet(); });
-    logActivity({ kind: "trade", title: (buy ? "Bought $" : "Sold $") + t.sym, detail: sAmt + (buy ? " QOR" : " $" + t.sym), hash: tx.hash });
-    $("t-amount").value = "";
-    loadWallet().catch(() => {});
-  } catch (e) { tradeStatus("Stopped: " + errText(e)); }
-  finally { tradeBusy = false; refreshTrade().catch(() => {}); }
-};
-
-loadTradeTokens().catch(() => { $("t-token").textContent = ""; const o = document.createElement("option"); o.textContent = "Could not load tokens"; $("t-token").append(o); });
-setInterval(() => { if (tradeTokens.length && !tradeBusy) refreshTrade().catch(() => {}); }, 30000);
-updateDescLimit();
-
-// ---- Step 4: Dashboard (live from the factory) ----
-function tileColor(seed) {
-  let h = 0; for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
-  return "hsl(" + (h % 360) + " 70% 45%)";
-}
-function setAvatar(el, img, letter, seed) {
-  el.textContent = "";
-  el.style.background = img ? "" : tileColor(seed || letter || "?");
-  el.style.color = img ? "" : "#fff";
-  if (img) { const im = document.createElement("img"); im.src = img; im.alt = ""; im.referrerPolicy = "no-referrer"; im.onerror = () => { im.remove(); el.style.background = tileColor(seed || letter); el.style.color = "#fff"; el.textContent = letter || "?"; }; el.append(im); }
-  else el.textContent = letter || "?";
-}
-function tokenRow(r, onClick) {
-  const row = document.createElement("div"); row.className = "tok-row"; row.style.cursor = onClick ? "pointer" : "default";
-  const av = document.createElement("div"); av.className = "avatar"; setAvatar(av, r.img, (r.symbol || "?")[0], r.symbol);
-  const meta = document.createElement("div"); meta.className = "tok-meta";
-  const nm = document.createElement("div"); nm.className = "tok-name"; nm.textContent = r.name + " ";
-  const tk = document.createElement("span"); tk.className = "badge"; tk.textContent = "$" + r.symbol; nm.append(tk);
-  const sub = document.createElement("div"); sub.className = "tok-sub"; sub.textContent = r.sub;
-  meta.append(nm, sub);
-  if (r.desc) { const d = document.createElement("div"); d.className = "tok-sub"; d.textContent = r.desc; meta.append(d); }
-  const right = document.createElement("div"); right.style.textAlign = "right";
-  const badge = document.createElement("span"); badge.className = "badge" + (r.good ? " good" : ""); badge.textContent = r.badge; right.append(badge);
-  if (r.extra) { const x = document.createElement("div"); x.className = "tok-val"; x.textContent = r.extra; right.append(x); }
-  row.append(av, meta, right);
-  if (onClick) row.onclick = onClick;
-  return row;
-}
-function setProgress(p) {
-  const wrap = $("d-progress-wrap"), box = $("d-progress");
-  box.textContent = "";
-  if (!p) { wrap.hidden = true; return; }
-  wrap.hidden = false;
-  box.append(tokenRow({ name: p.name, symbol: p.symbol, sub: p.text, badge: p.failed ? "Stopped" : "Pending" }));
-}
-function openTradeFor(addr) {
-  const i = tradeTokens.findIndex((t) => t.addr === addr);
-  if (i >= 0) { $("t-token").value = String(i); $("t-amount").value = ""; refreshTrade().catch(() => {}); }
-  show("trade");
-}
-async function loadDashboard() {
-  const list = $("d-list");
-  try {
-    const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
-    const n = Number(await fac.tokenCount());
-    $("d-count").textContent = n ? "(" + n + ")" : "";
-    if (!n) { list.textContent = "No tokens launched yet."; return; }
-    const rows = await Promise.all(Array.from({ length: n }, (_, k) => n - 1 - k).map(async (i) => {
-      const addr = await fac.tokens(i);
-      const pool = await fac.poolOf(addr);
-      const t = new ethers.Contract(addr, TOK_META, reader);
-      const [symbol, name, desc, creator, supply] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => ""), t.creator().catch(() => ""), t.totalSupply()]);
-      let wq = null;
-      if (pool !== ethers.ZeroAddress) { try { wq = await new ethers.Contract(pool, POOL_ABI, reader).wqorReserve(); } catch (e) {} }
-      return { addr, symbol, name, img: imgFrom(desc), desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90), sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : "") + (t && t.factory === FACTORY_V3 ? " · Legacy, no PQC check" : ""), badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null, extra: wq !== null ? fmtUnits(wq) + " WQOR" : "" };
-    }));
-    list.textContent = "";
-    for (const r of rows) list.append(tokenRow(r, () => openTradeFor(r.addr)));
-  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
-}
-$("d-refresh").onclick = () => { $("d-list").textContent = "Loading tokens..."; loadDashboard(); };
-loadDashboard();
-setInterval(() => { loadDashboard().catch(() => {}); }, 60000);
-
-// ---- Activity: transactions made in Reqo, recorded on this device per wallet ----
-let actFilter = "all";
-function actKey() { return me ? "reqo-activity-" + me.toLowerCase() : null; }
-function logActivity(entry) {
-  const k = actKey(); if (!k) return;
-  let list = [];
-  try { list = JSON.parse(localStorage.getItem(k)) || []; } catch (e) {}
-  list.unshift({ ...entry, at: Date.now() });
-  try { localStorage.setItem(k, JSON.stringify(list.slice(0, 200))); } catch (e) {}
-  renderActivity();
-}
-function renderActivity() {
-  const box = $("act-list"); if (!box) return;
-  const k = actKey();
-  let list = [];
-  if (k) { try { list = JSON.parse(localStorage.getItem(k)) || []; } catch (e) {} }
-  const shown = list.filter((x) => actFilter === "all" || (actFilter === "sent" && x.kind === "sent") || (actFilter === "trades" && x.kind === "trade") || (actFilter === "launch" && x.kind === "launch"));
-  if (!me) { box.textContent = "Connect your wallet to see your activity."; return; }
-  if (!shown.length) { box.textContent = list.length ? "Nothing in this filter yet." : "Transactions you make in Reqo appear here."; return; }
-  box.textContent = "";
-  for (const x of shown) {
-    const row = document.createElement("div");
-    row.className = "hrow";
-    const av = document.createElement("div"); av.className = "avatar sm"; av.textContent = x.kind === "sent" ? "\u2191" : x.kind === "launch" ? "L" : "T";
-    const meta = document.createElement("div"); meta.className = "tok-meta";
-    const t1 = document.createElement("div"); t1.className = "tok-name"; t1.textContent = x.title;
-    const t2 = document.createElement("div"); t2.className = "tok-sub"; t2.textContent = x.detail + " \u00b7 " + new Date(x.at).toLocaleString();
-    const t3 = document.createElement("div"); t3.style.fontSize = "12px"; t3.style.wordBreak = "break-all"; t3.append(hlink(x.hash));
-    meta.append(t1, t2, t3);
-    const badge = document.createElement("span"); badge.className = "badge good"; badge.textContent = "Confirmed";
-    row.append(av, meta, badge);
-    box.append(row);
-  }
-}
-document.querySelectorAll("#act-filters .chip").forEach((c) => c.onclick = () => {
-  actFilter = c.dataset.f;
-  document.querySelectorAll("#act-filters .chip").forEach((x) => x.classList.toggle("on", x === c));
-  renderActivity();
-});
-
-// ---- Typed-data payload in the form QoreX accepted in testing ----
-function typedPayload(domain, types, primaryType, message) {
-  const domainTypes = [];
-  if (domain.name !== undefined) domainTypes.push({ name: "name", type: "string" });
-  if (domain.version !== undefined) domainTypes.push({ name: "version", type: "string" });
-  if (domain.chainId !== undefined) domainTypes.push({ name: "chainId", type: "uint256" });
-  if (domain.verifyingContract !== undefined) domainTypes.push({ name: "verifyingContract", type: "address" });
-  const msg = {};
-  for (const f of types[primaryType]) {
-    const v = message[f.name];
-    msg[f.name] = typeof v === "bigint" ? v.toString() : v;
-  }
-  return JSON.stringify({ types: { EIP712Domain: domainTypes, ...types }, primaryType, domain: { ...domain }, message: msg });
-}
-
-// ---- Listing from both factories (V3 launches stay visible) ----
-async function allFactoryTokens() {
-  const out = [];
-  for (const fa of FACTORY_LIST) {
-    const fac = new ethers.Contract(fa, FAC_LIST_ABI, reader);
-    const n = Number(await fac.tokenCount());
-    const addrs = await Promise.all(Array.from({ length: n }, (_, i) => fac.tokens(i)));
-    for (const addr of addrs) out.push({ addr, pool: await fac.poolOf(addr), factory: fa });
-  }
-  return out;
-}
-
-async function loadTradeTokens() {
-  const all = (await allFactoryTokens()).filter((t) => t.pool !== ethers.ZeroAddress);
-  const out = await Promise.all(all.map(async (t) => {
-    const c = new ethers.Contract(t.addr, TOK_META, reader);
-    const [sym, name, desc] = await Promise.all([c.symbol(), c.name(), c.description().catch(() => "")]);
-    return { addr: t.addr, pool: t.pool, sym, name, img: imgFrom(desc), legacy: t.factory === FACTORY_V3 };
-  }));
-  tradeTokens = out;
-  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
-  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
-  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name + (t.legacy ? " (legacy)" : ""); sel.append(o); });
-  if (keep && Number(keep) < out.length) sel.value = keep;
-  await refreshTrade();
-}
-
-async function loadDashboard() {
-  const list = $("d-list");
-  try {
-    const all = await allFactoryTokens();
-    $("d-count").textContent = all.length ? "(" + all.length + ")" : "";
-    if (!all.length) { list.textContent = "No tokens launched yet."; return; }
-    const rows = await Promise.all(all.slice().reverse().map(async (t) => {
-      const c = new ethers.Contract(t.addr, TOK_META, reader);
-      const [symbol, name, desc, creator, supply] = await Promise.all([c.symbol(), c.name(), c.description().catch(() => ""), c.creator().catch(() => ""), c.totalSupply()]);
-      let wq = null;
-      if (t.pool !== ethers.ZeroAddress) { try { wq = await new ethers.Contract(t.pool, POOL_ABI, reader).wqorReserve(); } catch (e) {} }
-      return {
-        addr: t.addr, symbol, name, img: imgFrom(desc),
-        desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90),
-        sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : "") + (t && t.factory === FACTORY_V3 ? " · Legacy, no PQC check" : ""),
-        badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null,
-        extra: wq !== null ? fmtUnits(wq) + " WQOR" : ""
-      };
-    }));
-    list.textContent = "";
-    for (const r of rows) list.append(tokenRow(r, () => openTradeFor(r.addr)));
-  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
-}
-
-async function loadWallet() {
-  renderActivity();
-  if (!me) {
-    $("w-total").textContent = "0.00 QOR";
-    $("w-addr").textContent = "Connect your wallet to see your balances";
-    $("w-count").textContent = "Connect a wallet";
-    $("w-tokens").textContent = "";
-    window.walletAssets = [];
-    return;
-  }
-  try {
-    $("w-addr").textContent = me;
-    loadRegistration();
-    const qor = await reader.getBalance(me);
-    const rows = [{ sym: "QOR", kind: "native", sub: "Native · QoreChain", bal: qor, tag: "Native" }];
-    const w = new ethers.Contract(WQOR, ERC20, reader);
-    rows.push({ sym: "WQOR", kind: "erc20", addr: WQOR, sub: "Wrapped QOR · quote asset", bal: await w.balanceOf(me), tag: "Quote" });
-    const all = await allFactoryTokens();
-    const tokenRows = await Promise.all(all.map(async (t) => {
-      const c = new ethers.Contract(t.addr, ERC20, reader);
-      const [sym, name, bal, desc] = await Promise.all([c.symbol(), c.name(), c.balanceOf(me), c.description().catch(() => "")]);
-      return { sym, kind: "erc20", addr: t.addr, img: imgFrom(desc), sub: name + " · " + short(t.addr) + (t.factory === FACTORY_V3 ? " · Legacy, no PQC check" : ""), bal, tag: name };
-    }));
-    rows.push(...tokenRows);
-    const held = rows.filter((r) => r.bal > 0n).sort((x, y) => (x.bal === y.bal ? 0 : x.bal > y.bal ? -1 : 1));
-    $("w-total").textContent = fmtUnits(qor) + " QOR";
-    $("w-count").textContent = held.length + " held";
-    window.walletAssets = held;
-    renderTokens(held);
-    if (!held.length) $("w-tokens").textContent = "You don't hold any tokens yet.";
-  } catch (e) {
-    toast("Could not read balances from the chain");
-  }
-}
-
-// ---- Loader: shown while an action runs ----
-function showLoader(text) {
-  const open = document.querySelector("dialog[open]");
-  if (open) open.appendChild($("loader")); else document.body.appendChild($("loader"));
-  $("loader-text").textContent = text || "Working...";
-  $("loader").hidden = false;
-}
-function hideLoader() { $("loader").hidden = true; }
-function withLoader(id, text) {
-  const el = $(id); const orig = el.onclick;
-  if (!orig) return;
-  el.onclick = async (e) => { showLoader(text); try { return await orig(e); } finally { hideLoader(); } };
-}
-withLoader("connectBtn", "Connecting QoreX...");
-withLoader("t-go", "Trading on Diana...");
-withLoader("snd-go", "Sending...");
-withLoader("dlg-sign", "Creating your token. Confirm each step in QoreX...");
-$("menu-btn").onclick = () => show("settings");
-
-// ---- Dashboard (v4.16.1): tokens, launches and activity, all read live ----
-function dashRow(r) {
-  const row = document.createElement("div");
-  row.className = "tok-row"; row.style.cursor = "pointer"; row.style.alignItems = "flex-start";
-  row.onclick = () => openTradeFor(r.addr);
-  const av = document.createElement("div"); av.className = "avatar";
-  av.style.width = "56px"; av.style.height = "56px"; av.style.flex = "0 0 56px";
-  setAvatar(av, r.img, (r.symbol || "?")[0], r.symbol);
-  const meta = document.createElement("div"); meta.className = "tok-meta";
-  const nm = document.createElement("div"); nm.className = "tok-name"; nm.style.whiteSpace = "normal";
-  nm.textContent = r.name;
-  const pq = document.createElement("span"); pq.className = "badge" + (r.pqc ? " good" : "");
-  pq.textContent = r.pqc ? "PQC launch" : "Legacy"; pq.style.marginLeft = "6px";
-  nm.append(pq);
-  if (r.mine) { const m = document.createElement("span"); m.className = "badge"; m.textContent = "Your token"; m.style.marginLeft = "6px"; nm.append(m); }
-  const sym = document.createElement("div"); sym.className = "tok-sub";
-  sym.textContent = "$" + r.symbol + " · " + short(r.addr);
-  const d = document.createElement("div");
-  d.style.cssText = "font-size:13px;line-height:1.45;margin-top:6px;word-break:break-word";
-  d.textContent = r.desc || "No description.";
-  meta.append(nm, sym, d);
-  const copy = document.createElement("button"); copy.className = "icon-btn";
-  copy.setAttribute("aria-label", "Copy address"); copy.innerHTML = COPY_SVG;
-  copy.onclick = (ev) => {
-    ev.stopPropagation();
-    navigator.clipboard.writeText(r.addr).then(() => toast("Address copied")).catch(() => toast("Copy failed"));
-  };
-  row.append(av, meta, copy);
-  return row;
-}
-function dashActivity() {
-  const list = $("d-list");
-  list.textContent = ""; $("d-count").textContent = "";
-  if (!me) { list.textContent = "Connect your wallet to see your activity."; return; }
-  let items = [];
-  try { items = JSON.parse(localStorage.getItem("reqo-activity-" + me.toLowerCase())) || []; } catch (e) {}
-  if (!items.length) { list.textContent = "Transactions you make in Reqo appear here."; return; }
-  for (const x of items.slice(0, 50)) {
-    const row = document.createElement("div"); row.className = "hrow";
-    const meta = document.createElement("div"); meta.className = "tok-meta";
-    const t1 = document.createElement("div"); t1.className = "tok-name"; t1.textContent = x.title;
-    const t2 = document.createElement("div"); t2.className = "tok-sub"; t2.textContent = x.detail + " · " + new Date(x.at).toLocaleString();
-    const t3 = document.createElement("div"); t3.style.fontSize = "12px"; t3.style.wordBreak = "break-all"; t3.append(hlink(x.hash));
-    meta.append(t1, t2, t3);
-    row.append(meta);
-    list.append(row);
-  }
-}
-async function renderDashboard() {
-  $("d-title").textContent = dashTab === "tokens" ? "Tokens on Reqo" : dashTab === "launches" ? "Your launches" : "Activity";
-  if (dashTab === "activity") return dashActivity();
-  const list = $("d-list");
-  if (dashTab === "launches" && !me) { list.textContent = "Connect your wallet to see your launches."; $("d-count").textContent = ""; return; }
-  list.textContent = "Loading...";
-  try {
-    const all = await allFactoryTokens();
-    const rows = await Promise.all(all.slice().reverse().map(async (t) => {
-      const c = new ethers.Contract(t.addr, TOK_META, reader);
-      const [symbol, name, desc, creator] = await Promise.all([
-        c.symbol(), c.name(), c.description().catch(() => ""), c.creator().catch(() => ethers.ZeroAddress)
-      ]);
-      return { addr: t.addr, symbol, name, desc: desc.replace(/\s*img:\S+/, "").trim(), img: imgFrom(desc), pqc: t.factory === FACTORY_V4,
-               mine: !!me && creator.toLowerCase() === me.toLowerCase() };
-    }));
-    const shown = dashTab === "launches" ? rows.filter((r) => r.mine) : rows;
-    $("d-count").textContent = "(" + shown.length + ")";
-    list.textContent = "";
-    if (!shown.length) { list.textContent = dashTab === "launches" ? "You have not launched a token yet." : "No tokens launched yet."; return; }
-    for (const r of shown) list.append(dashRow(r));
-  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
-}
-async function loadDashboard() { return renderDashboard(); }
-document.querySelectorAll("#dash-tabs button").forEach((b) => b.onclick = () => {
-  dashTab = b.dataset.dtab;
-  document.querySelectorAll("#dash-tabs button").forEach((x) => x.classList.toggle("on", x === b));
-  renderDashboard();
-});
-$("d-notice").onclick = () => show("wallet");
-
-// ---- Reqo AI verification: live chain reads only, nothing is signed ----
-const PQC_VERIFY_ADDR = "0x0000000000000000000000000000000000000a01";
-const PQC_VERIFY_ABI = ["function pqcVerify(bytes,bytes,bytes) view returns (bool)"];
-const FAC_CREATOR_ABI = ["function creatorOf(address) view returns (address)"];
-const MSG_PREFIX_TXT = "qorechain-msg-v1|qorechain-diana|";
-function aiCard(title, lines) {
-  const m = document.createElement("div");
-  m.className = "msg ai";
-  m.append(title, checkBox({ lines }));
-  chat.append(m);
-  chat.scrollTop = chat.scrollHeight;
-}
-async function verifyToken(addr) {
-  const c4 = await new ethers.Contract(FACTORY_V4, FAC_CREATOR_ABI, reader).creatorOf(addr);
-  const c3 = await new ethers.Contract(FACTORY_V3, FAC_CREATOR_ABI, reader).creatorOf(addr);
-  const lines = [];
-  if (c4 !== ethers.ZeroAddress) lines.push(["ok", "Launched through MemeFactoryV4, which requires a verified ML-DSA-87 signature."]);
-  else if (c3 !== ethers.ZeroAddress) lines.push(["warn", "Launched through MemeFactoryV3: legacy, no PQC check."]);
-  else return aiCard("Token verification", [["bad", "Not a Reqo token from either factory."]]);
-  const creator = c4 !== ethers.ZeroAddress ? c4 : c3;
-  lines.push(["ok", "Creator: " + creator]);
-  const [registered, alg, pk, proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(creator);
-  lines.push([registered ? "ok" : "bad", registered ? "Creator's key is registered on chain." : "Creator has no registered key."]);
-  lines.push([Number(alg) === 1 ? "ok" : "bad", "Algorithm: ML-DSA-87 (id " + alg + ")."]);
-  lines.push([proven ? "ok" : "bad", proven ? "Possession of the key is proven." : "Possession is not proven."]);
-  if (registered) lines.push(["ok", "Key hash: " + ethers.keccak256(pk).slice(0, 18) + "…"]);
-  lines.push(["warn", "This is the creator's key status now. The launch's own signature is in its transaction."]);
-  aiCard("Token verification", lines);
-}
-async function verifySignature(obj) {
-  const { pubkey: pk, signature: sig, message: msg } = obj;
-  if (![pk, sig, msg].every((x) => typeof x === "string" && ethers.isHexString(x))) {
-    return aiCard("Signature verification", [["bad", "pubkey, signature and message must be 0x hex strings."]]);
-  }
-  const pkLen = (pk.length - 2) / 2, sigLen = (sig.length - 2) / 2;
-  const text = new TextDecoder().decode(ethers.getBytes(msg));
-  const lines = [
-    [pkLen === 2592 ? "ok" : "bad", "Public key: " + pkLen + " bytes (ML-DSA-87 needs 2592)."],
-    [sigLen === 4627 ? "ok" : "bad", "Signature: " + sigLen + " bytes (ML-DSA-87 needs 4627)."],
-    [text.startsWith(MSG_PREFIX_TXT) ? "ok" : "warn", text.startsWith(MSG_PREFIX_TXT) ? "Message has the QoreSign prefix for Diana." : "Message lacks the qorechain-msg-v1 prefix. The chain checks exactly the bytes given."]
-  ];
-  const iface = new ethers.Interface(PQC_VERIFY_ABI);
-  const raw = await reader.call({ to: PQC_VERIFY_ADDR, data: iface.encodeFunctionData("pqcVerify", [pk, sig, msg]) });
-  const ok = iface.decodeFunctionResult("pqcVerify", raw)[0];
-  lines.push([ok ? "ok" : "bad", ok ? "Diana's pqcVerify returned true." : "Diana's pqcVerify returned false: the signature does not match this key and message."]);
-  aiCard("Signature verification", lines);
-}
-async function chainVerify(text) {
-  const t = text.trim();
-  if (t.startsWith("{")) {
-    let obj;
-    try { obj = JSON.parse(t); } catch (e) { return false; }
-    if (!obj.pubkey || !obj.signature || !obj.message) return false;
-    addMsg("user", "Verify signature (" + t.length + " characters)");
-    try { await verifySignature(obj); } catch (e) { aiCard("Signature verification", [["bad", "Chain call failed: " + errText(e)]]); }
-    return true;
-  }
-  const m = t.match(/0x[0-9a-fA-F]{40}/);
-  const onlyAddress = /^0x[0-9a-fA-F]{40}$/.test(t);
-  if (m && (onlyAddress || /verify|check|pqc/i.test(t))) {
-    addMsg("user", t);
-    try { await verifyToken(m[0]); } catch (e) { aiCard("Token verification", [["bad", "Chain call failed: " + errText(e)]]); }
-    return true;
-  }
-  if (/^\s*verify\b/i.test(t)) {
-    addMsg("user", t);
-    aiCard("Token verification", [["warn", "Paste the full token address after verify, for example: verify 0xb23E095B1EA613048B257247D6A6BDf1583CED3D"]]);
-    return true;
-  }
-  return false;
-}
-
-// ---- Reqo AI chips (last declaration wins): data-fill fills the box, others send ----
-document.querySelectorAll("#ai-chips .chip").forEach((c) => c.onclick = () => {
-  if (c.dataset.fill) { $("ai-input").value = c.dataset.fill; $("ai-input").focus(); }
-  else { $("ai-input").value = c.textContent; sendAI(); }
-});
-
-// ---- Launch form reset after a successful launch ----
-function resetLaunchForm() {
-  ["l-name", "l-symbol", "l-supply", "l-desc"].forEach((id) => { $(id).value = ""; });
-  $("l-file").value = "";
-  launchImageUrl = null;
-  $("l-drop").querySelectorAll("img").forEach((i) => i.remove());
-  $("l-title").textContent = "Add a token image";
-  $("l-hint").textContent = "Tap to choose an image";
-  $("ai-attach").hidden = true;
-  $("ai-file").value = "";
-  $("ai-thumb").removeAttribute("src");
-  $("dlg-noimg").checked = false;
-  updateDescLimit();
-}
-
-// ---- Success pop-up with the Reqo logo and confetti ----
-function showSuccess(title, sub, hash, next) {
-  hideLoader();
-  const old = document.getElementById("success"); if (old) old.remove();
-  const wrap = document.createElement("div");
-  wrap.id = "success"; wrap.className = "success";
-  const card = document.createElement("div"); card.className = "success-card";
-  for (let i = 0; i < 26; i++) {
-    const c = document.createElement("span"); c.className = "confetti";
-    c.style.left = (Math.random() * 100) + "%";
-    c.style.animationDelay = (Math.random() * 0.4) + "s";
-    c.style.background = i % 3 === 0 ? "var(--ink)" : "var(--accent)";
-    card.append(c);
-  }
-  const logo = document.createElement("img"); logo.src = "logo.png"; logo.alt = "Reqo"; logo.className = "success-logo";
-  const t = document.createElement("div"); t.className = "success-title"; t.textContent = title + " 🎉";
-  const s2 = document.createElement("div"); s2.className = "success-sub"; s2.textContent = sub;
-  card.append(logo, t, s2);
-  if (hash) { const h = document.createElement("div"); h.style.cssText = "font-size:12px;word-break:break-all;margin-bottom:12px"; h.append(hlink(hash)); card.append(h); }
-  const close = document.createElement("button"); close.className = "btn"; close.textContent = "Done"; close.style.margin = "0";
-  close.onclick = () => wrap.remove();
-  card.append(close);
-  wrap.append(card);
-  wrap.onclick = (e) => { if (e.target === wrap) wrap.remove(); };
-  document.body.append(wrap);
-  setTimeout(() => { if (wrap.isConnected) wrap.remove(); }, 9000);
-  if (next) next();
-}
-
-// ---- Dashboard banners: three real destinations, rotating every 5 seconds ----
-let slideIdx = 0;
-function showSlide(i) {
-  const sl = document.querySelectorAll(".slide");
-  slideIdx = (i + sl.length) % sl.length;
-  sl.forEach((x, k) => x.classList.toggle("active", k === slideIdx));
-  document.querySelectorAll(".slide-dots span").forEach((d, k) => d.classList.toggle("on", k === slideIdx));
-}
-document.querySelectorAll(".slide").forEach((sl) => sl.onclick = () => show(sl.dataset.go));
-setInterval(() => showSlide(slideIdx + 1), 5000);
-
-// ---- Live documentation: fetched from the public repository when opened ----
-const DOCS = [
-  { path: "README.md", title: "README" },
-  { path: "docs/QCAI-stage1.md", title: "QCAI stage 1 audit" },
-  { path: "docs/SECURITY-REVIEW.md", title: "Security review" },
-  { path: "docs/PROGRESS.md", title: "Progress log" },
-  { path: "docs/VECTOR-SOURCES.md", title: "Test vector sources" }
-];
-const REPO_RAW = "https://raw.githubusercontent.com/Collinxweb/Reqo/main/";
-const REPO_WEB = "https://github.com/Collinxweb/Reqo/blob/main/";
-function escHtml(x) { return x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
-function mdInline(x) {
-  return escHtml(x)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-}
-function renderMd(md) {
-  const out = []; let inCode = false, code = [], table = [], list = false;
-  const endList = () => { if (list) { out.push("</ul>"); list = false; } };
-  const endTable = () => { if (table.length) { out.push("<pre>" + escHtml(table.join("\n")) + "</pre>"); table = []; } };
-  for (const line of md.split("\n")) {
-    if (line.startsWith("```")) {
-      if (inCode) { out.push("<pre>" + escHtml(code.join("\n")) + "</pre>"); code = []; inCode = false; }
-      else { endList(); endTable(); inCode = true; }
-      continue;
-    }
-    if (inCode) { code.push(line); continue; }
-    if (line.startsWith("|")) { endList(); table.push(line); continue; }
-    endTable();
-    const h = line.match(/^(#{1,3})\s+(.*)$/);
-    if (h) { endList(); const tag = "h" + (h[1].length + 1); out.push("<" + tag + ">" + mdInline(h[2]) + "</" + tag + ">"); continue; }
-    const li = line.match(/^\s*[-*]\s+(.*)$/);
-    if (li) { if (!list) { out.push("<ul>"); list = true; } out.push("<li>" + mdInline(li[1]) + "</li>"); continue; }
-    endList();
-    if (line.trim() === "") continue;
-    out.push("<p>" + mdInline(line) + "</p>");
-  }
-  endList(); endTable();
-  if (inCode) out.push("<pre>" + escHtml(code.join("\n")) + "</pre>");
-  return out.join("\n");
-}
-function renderDocList() {
-  const box = $("doc-list"); box.textContent = "";
-  for (const d of DOCS) {
-    const b = document.createElement("button");
-    b.className = "btn ghost"; b.style.cssText = "display:block;margin-top:8px;text-align:left";
-    b.textContent = d.title;
-    b.onclick = () => openDoc(d);
-    box.append(b);
-  }
-}
-async function openDoc(d) {
-  $("doc-card").hidden = false;
-  $("doc-title").textContent = d.title;
-  $("doc-source").textContent = "Source: " + REPO_WEB + d.path + " · loading…";
-  $("doc-body").textContent = "Loading from GitHub…";
-  try {
-    const r = await fetch(REPO_RAW + d.path, { cache: "no-store" });
-    if (!r.ok) throw new Error("GitHub returned HTTP " + r.status);
-    $("doc-body").innerHTML = renderMd(await r.text());
-    $("doc-source").textContent = "Source: " + REPO_WEB + d.path + " · fetched " + new Date().toLocaleString();
-  } catch (e) {
-    $("doc-body").textContent = "Could not load this document from GitHub: " + errText(e);
-  }
-  $("doc-card").scrollIntoView({ behavior: "smooth" });
-}
-$("doc-close").onclick = () => { $("doc-card").hidden = true; };
-renderDocList();
 </script>
 </body>
 </html>
