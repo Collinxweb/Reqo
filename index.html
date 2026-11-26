@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.14.0 design wired: Reqo AI check, picture warning -->
+<!-- version: v4.15.0 design wired: v4 launch with QoreX signing, both factories listed -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -325,6 +325,22 @@ function openWalletPicker() {
   $("dlg-wallet").showModal();
 }
 const $ = (id) => document.getElementById(id);
+// ---- v4 launch and multi-factory listing ----
+const FACTORY_V3 = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
+const FACTORY_V4 = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
+const FACTORY_LIST = [FACTORY_V3, FACTORY_V4];
+const PQC_KEY_STATUS = "0x0000000000000000000000000000000000000a02";
+const FAC_V4 = [
+  "function createToken(string,string,uint256,string,uint256,uint256,bytes,bytes) returns (address)",
+  "function messageFor(address,uint256,uint256,string,string,uint256,string) view returns (bytes)",
+  "event TokenCreated(address indexed token, address indexed pool, address indexed creator, string name, string symbol, uint256 supply)"
+];
+const KEY_ABI = ["function pqcKeyStatus(address) view returns (bool, uint8, bytes, bool)"];
+const FAC_LIST_ABI = [
+  "function tokenCount() view returns (uint256)",
+  "function tokens(uint256) view returns (address)",
+  "function poolOf(address) view returns (address)"
+];
 function showErr(msg) { const b = document.getElementById("errbar"); if (!b) return; b.textContent = "Reqo error: " + msg + " (tap to dismiss)"; b.hidden = false; }
 window.addEventListener("error", (e) => showErr(e.message + (e.lineno ? " (line " + e.lineno + ")" : "")));
 window.addEventListener("unhandledrejection", (e) => showErr((e.reason && (e.reason.shortMessage || e.reason.message)) || String(e.reason)));
@@ -770,7 +786,7 @@ function renderCheck(target, res) { target.textContent = ""; target.append(check
 function updateSignGate() {
   const c = window.launchCheck || { ok: false, blocking: true };
   const noImg = !launchImageUrl;
-  $("dlg-sign").disabled = !c.ok || c.blocking || (noImg && !$("dlg-noimg").checked);
+  $("dlg-sign").disabled = !c.ok || c.blocking || !isQoreXWallet() || (noImg && !$("dlg-noimg").checked);
 }
 $("dlg-noimg").onchange = updateSignGate;
 
@@ -831,7 +847,19 @@ $("dlg-sign").onclick = async () => {
     const signer = await getSigner();
     const addr = await signer.getAddress();
     const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
-    const fac = new ethers.Contract(FACTORY, FAC_FULL, signer);
+    const fac = new ethers.Contract(FACTORY_V4, FAC_V4, signer);
+    // v4 launch: QoreX signs the request with the account's ML-DSA-87 key.
+    if (!isQoreXWallet() || !window.qorex || !window.qorex.native || !qorNative) throw new Error("Launching needs QoreX, which signs with your quantum-safe key. Connect QoreX.");
+    const nonce = BigInt(Date.now());
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+    const supplyN = BigInt(launchDraft.supply);
+    const fullMsg = await fac.messageFor(addr, nonce, deadline, launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description);
+    const data = ethers.dataSlice(fullMsg, 33); // QoreX adds the "qorechain-msg-v1|qorechain-diana|" prefix itself
+    const [registered, algId, registeredKey, proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(addr);
+    if (!registered || Number(algId) !== 1 || !proven) throw new Error("Your key is not registered and proven. Register it in QoreX first.");
+    const qs = await window.qorex.native.signArbitrary("qorechain-diana", qorNative, ethers.getBytes(data));
+    if (!qs || !qs.pq || !qs.pq.signature) throw new Error("QoreX returned no post-quantum signature.");
+    const pqSig = ethers.hexlify(Uint8Array.from(atob(qs.pq.signature), (c) => c.charCodeAt(0)));
 
     const bal = await wq.balanceOf(addr);
     if (bal < SEED) {
@@ -848,7 +876,7 @@ $("dlg-sign").onclick = async () => {
       await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
     }
     setProgress({ ...pg, text: "Step 3 of 3: create the token. Confirm in your wallet." }); const s3 = addStep("3. Create the token: confirm in your wallet");
-    const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, launchDraft.supply, launchDraft.description);
+    const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig);
     s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
     const rc = await tx.wait();
     let token = null, pool = null;
@@ -1215,6 +1243,89 @@ document.querySelectorAll("#act-filters .chip").forEach((c) => c.onclick = () =>
   document.querySelectorAll("#act-filters .chip").forEach((x) => x.classList.toggle("on", x === c));
   renderActivity();
 });
+
+// ---- Listing from both factories (V3 launches stay visible) ----
+async function allFactoryTokens() {
+  const out = [];
+  for (const fa of FACTORY_LIST) {
+    const fac = new ethers.Contract(fa, FAC_LIST_ABI, reader);
+    const n = Number(await fac.tokenCount());
+    const addrs = await Promise.all(Array.from({ length: n }, (_, i) => fac.tokens(i)));
+    for (const addr of addrs) out.push({ addr, pool: await fac.poolOf(addr), factory: fa });
+  }
+  return out;
+}
+
+async function loadTradeTokens() {
+  const all = (await allFactoryTokens()).filter((t) => t.pool !== ethers.ZeroAddress);
+  const out = await Promise.all(all.map(async (t) => {
+    const c = new ethers.Contract(t.addr, TOK_META, reader);
+    const [sym, name, desc] = await Promise.all([c.symbol(), c.name(), c.description().catch(() => "")]);
+    return { addr: t.addr, pool: t.pool, sym, name, img: imgFrom(desc) };
+  }));
+  tradeTokens = out;
+  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
+  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
+  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name; sel.append(o); });
+  if (keep && Number(keep) < out.length) sel.value = keep;
+  await refreshTrade();
+}
+
+async function loadDashboard() {
+  const list = $("d-list");
+  try {
+    const all = await allFactoryTokens();
+    $("d-count").textContent = all.length ? "(" + all.length + ")" : "";
+    if (!all.length) { list.textContent = "No tokens launched yet."; return; }
+    const rows = await Promise.all(all.slice().reverse().map(async (t) => {
+      const c = new ethers.Contract(t.addr, TOK_META, reader);
+      const [symbol, name, desc, creator, supply] = await Promise.all([c.symbol(), c.name(), c.description().catch(() => ""), c.creator().catch(() => ""), c.totalSupply()]);
+      let wq = null;
+      if (t.pool !== ethers.ZeroAddress) { try { wq = await new ethers.Contract(t.pool, POOL_ABI, reader).wqorReserve(); } catch (e) {} }
+      return {
+        addr: t.addr, symbol, name, img: imgFrom(desc),
+        desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90),
+        sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : ""),
+        badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null,
+        extra: wq !== null ? fmtUnits(wq) + " WQOR" : ""
+      };
+    }));
+    list.textContent = "";
+    for (const r of rows) list.append(tokenRow(r, () => openTradeFor(r.addr)));
+  } catch (e) { list.textContent = "Could not load tokens from the chain: " + errText(e); }
+}
+
+async function loadWallet() {
+  renderActivity();
+  if (!me) {
+    $("w-total").textContent = "0.00 QOR";
+    $("w-addr").textContent = "Connect your wallet to see your balances";
+    $("w-count").textContent = "Connect a wallet";
+    $("w-tokens").textContent = "";
+    return;
+  }
+  try {
+    $("w-addr").textContent = me;
+    loadRegistration();
+    const qor = await reader.getBalance(me);
+    const rows = [{ sym: "QOR", kind: "native", sub: "Native · QoreChain", bal: qor, tag: "Native" }];
+    const w = new ethers.Contract(WQOR, ERC20, reader);
+    rows.push({ sym: "WQOR", kind: "erc20", addr: WQOR, sub: "Wrapped QOR · quote asset", bal: await w.balanceOf(me), tag: "Quote" });
+    const all = await allFactoryTokens();
+    const tokenRows = await Promise.all(all.map(async (t) => {
+      const c = new ethers.Contract(t.addr, ERC20, reader);
+      const [sym, name, bal, desc] = await Promise.all([c.symbol(), c.name(), c.balanceOf(me), c.description().catch(() => "")]);
+      return { sym, kind: "erc20", addr: t.addr, img: imgFrom(desc), sub: name + " · " + short(t.addr), bal, tag: name };
+    }));
+    rows.push(...tokenRows);
+    $("w-total").textContent = fmtUnits(qor) + " QOR";
+    $("w-count").textContent = rows.length + " assets";
+    window.walletAssets = rows;
+    renderTokens(rows);
+  } catch (e) {
+    toast("Could not read balances from the chain");
+  }
+}
 </script>
 </body>
 </html>
