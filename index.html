@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.15.3 design wired: launch gas limit, loader inside open dialog -->
+<!-- version: v4.15.4 design wired: launch checks each step separately -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -891,11 +891,23 @@ $("dlg-sign").onclick = async () => {
       await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
     }
     setProgress({ ...pg, text: "Step 3 of 3: create the token. Confirm in your wallet." }); const s3 = addStep("3. Create the token: confirm in your wallet");
+    // Check each piece on its own, so the failing step is named.
+    const rpcErr = (e) => JSON.stringify({ code: e.code, msg: e.shortMessage || e.message, data: e.data, rpc: e.info && e.info.error ? e.info.error : null }).slice(0, 260);
+    const pqcIface = new ethers.Interface(["function pqcVerify(bytes,bytes,bytes) view returns (bool)"]);
+    const keyIface = new ethers.Interface(KEY_ABI);
+    try {
+      await reader.call({ to: PQC_KEY_STATUS, data: keyIface.encodeFunctionData("pqcKeyStatus", [addr]) });
+    } catch (e) { throw new Error("step A, key status call: " + rpcErr(e)); }
+    let verifyRaw;
+    try {
+      verifyRaw = await reader.call({ to: "0x0000000000000000000000000000000000000a01", data: pqcIface.encodeFunctionData("pqcVerify", [registeredKey, pqSig, fullMsg]) });
+    } catch (e) { throw new Error("step B, signature check call: " + rpcErr(e)); }
+    if (!pqcIface.decodeFunctionResult("pqcVerify", verifyRaw)[0]) throw new Error("step B: the chain rejects this signature for this request");
     try {
       await fac.createToken.staticCall(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
     } catch (e) {
-      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || e.shortMessage || errText(e);
-      throw new Error("the create would revert: " + why);
+      const why = (e.revert && e.revert.name) || e.reason || (e.data && e.data !== "0x" ? "data " + e.data.slice(0, 74) : null) || rpcErr(e);
+      throw new Error("step C, create: " + why);
     }
     const tx = await fac.createToken(launchDraft.name, launchDraft.symbol, supplyN, launchDraft.description, nonce, deadline, registeredKey, pqSig, { gasLimit: 8000000n });
     s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
