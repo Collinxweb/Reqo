@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- version: v4.16.7 design wired: swap preflight, redirects, non-blocking loader, live docs -->
-<title>Reqo</title>
+<title>Reqo sample walkthrough Reqo</title>
 <link rel="icon" href="logo.png">
 <style>
 :root[data-theme="dark"]{--bg:#0a0c0b;--card:#13161a;--card2:#1a1e22;--line:#252a2f;--ink:#f2f5f3;--muted:#8b9590;--accent:#c6ff1a;--accentInk:#0a0c0b;--good:#2bd27a;--bad:#ff6b6b;--glow:rgba(198,255,26,.25)}
@@ -138,14 +138,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .doc-body a{color:var(--accent)}
 </style>
 <style>
-/* bottom bar: solid in both themes, so content does not show through */
-nav{background:#ffffff !important;opacity:1 !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+nav{background:#ffffff !important;opacity:1 !important;backdrop-filter:none !important}
 html[data-theme="dark"] nav{background:#13161a !important}
-nav button{color:#5b6461 !important}
-nav button.on{color:#4d7300 !important}
-html[data-theme="dark"] nav button{color:#9aa3a0 !important}
-html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
-/* banners: light text on the dark banner in every theme */
 .slide,.slide *{color:#f2f5f3 !important}
 .slide .kicker,.slide-kicker{color:#c6ff1a !important}
 .slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
@@ -492,7 +486,7 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
     const logo = document.createElement("img"); logo.src = "logo.png"; logo.alt = "Reqo"; logo.className = "success-logo";
     const t = document.createElement("div"); t.className = "success-title"; t.textContent = title + " 🎉";
     const s2 = document.createElement("div"); s2.className = "success-sub"; s2.textContent = sub;
-    const h = document.createElement("div"); h.className = "small muted"; h.style.wordBreak = "break-all"; h.textContent = "Demo transaction 0x" + hex(64);
+    const h = document.createElement("div"); h.className = "small muted"; h.style.wordBreak = "break-all"; h.textContent = "Sample transaction 0x" + hex(64);
     const done = document.createElement("button"); done.className = "btn"; done.textContent = "Done"; done.style.margin = "0";
     done.onclick = () => wrap.remove();
     card.append(logo, t, s2, h, done); wrap.append(card); document.body.append(wrap);
@@ -578,10 +572,12 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
     const dlg = $("dlg-launch");
     if (!n || !s || !sup) { toast("Fill in name, ticker and supply"); return; }
     $("dlg-fields").textContent = n + " · $" + s + " · " + fmt(sup, 0) + " supply";
-    $("dlg-ready").textContent = S.connected ? "Ready to sign in QoreX (demo)." : "Connect your wallet to launch.";
+    const clash = S.tokens.find((x) => x.sym.toLowerCase() === s.toLowerCase());
+    if (clash) $("dlg-ready").textContent = "✗ $" + s + " is already used by " + clash.name + " on Reqo. Choose a different ticker.";
+    else $("dlg-ready").textContent = S.connected ? "✓ $" + s + " is not used on Reqo yet. Ready to sign in QoreX (sample)." : "Connect your wallet to launch.";
     $("dlg-noimg").checked = false;
     $("dlg-noimg-wrap").hidden = false;
-    $("dlg-sign").disabled = !S.connected;
+    $("dlg-sign").disabled = !S.connected || !!clash;
     $("dlg-result").textContent = "";
     $("dlg-steps").textContent = "";
     dlg.showModal();
@@ -599,7 +595,7 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
     S.activity.unshift({ title: "Launched $" + s, detail: fmt(sup, 0) + " supply", when: "just now" });
     $("l-name").value = ""; $("l-symbol").value = ""; $("l-supply").value = ""; $("l-desc").value = ""; updateLimit();
     $("dlg-launch").close();
-    showSuccess("Token launched", "$" + s + " is live on Diana (demo).", () => { S.dashTab = "tokens"; show("dashboard"); });
+    showSuccess("Token launched", "$" + s + " launched (sample, nothing sent on-chain).", () => { S.dashTab = "tokens"; show("dashboard"); });
   };
 
   // ---- trade ----
@@ -646,7 +642,7 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
     else { S.holdings[t.sym] -= amt; S.qor += out; t.pool += amt; t.poolW -= out; }
     S.activity.unshift({ title: (S.side === "buy" ? "Bought" : "Sold") + " $" + t.sym, detail: fmt(amt, 4) + (S.side === "buy" ? " QOR" : " $" + t.sym), when: "just now" });
     $("t-amount").value = ""; updateTradeQuote(); $("t-status").textContent = "";
-    showSuccess(S.side === "buy" ? "Trade confirmed" : "Sale confirmed", (S.side === "buy" ? "Bought" : "Sold") + " $" + t.sym + " (demo).", () => show("wallet"));
+    showSuccess(S.side === "buy" ? "Trade confirmed" : "Sale confirmed", (S.side === "buy" ? "Bought" : "Sold") + " $" + t.sym + " (sample, nothing sent on-chain).", () => show("wallet"));
   };
 
   // ---- wallet ----
@@ -728,9 +724,30 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
     [/description/i, "Say what the token is for, who it's for, and one thing that makes it different."],
     [/buy|sell/i, "Open Trade, pick the token, and enter an amount. Trades are signed in QoreX."]
   ];
+  const IDEAS = [
+    { name: "Croak", sym: "CROAK", supply: "1000000", desc: "A frog coin for people who love ponds." },
+    { name: "SkillCoin", sym: "SKILL", supply: "1000000000", desc: "Rewarding helpful guides and answers with a dash of fun!" },
+    { name: "Mittens", sym: "MITT", supply: "500000", desc: "A cat coin for people who never stop scrolling." }
+  ];
+  let ideaIdx = 0;
+  function ideaCard() {
+    const idea = IDEAS[ideaIdx++ % IDEAS.length];
+    const box = document.createElement("div");
+    box.innerHTML = "<strong>Token idea</strong>";
+    const p = document.createElement("div"); p.textContent = idea.name + " ($" + idea.sym + ") · " + fmt(idea.supply, 0) + " supply"; box.append(p);
+    const d = document.createElement("div"); d.textContent = idea.desc; box.append(d);
+    const b = document.createElement("button"); b.className = "chip"; b.textContent = "Use this idea"; b.style.marginTop = "8px";
+    b.onclick = () => {
+      $("l-name").value = idea.name; $("l-symbol").value = idea.sym; $("l-supply").value = idea.supply; $("l-desc").value = idea.desc;
+      updateLimit(); show("launch");
+    };
+    box.append(b);
+    return box;
+  }
   async function aiSend(text) {
     const t = text.trim(); if (!t) return;
     bubble(t, "user");
+    if (/meme|idea|generate/i.test(t)) { await sleep(500); bubble(ideaCard(), "ai"); return; }
     const vm = t.match(/0x[0-9a-fA-F]{40}/);
     if (/^\s*verify\b/i.test(t) || /^0x[0-9a-fA-F]{40}$/.test(t)) {
       const tk = vm && DEMO_TOKENS[vm[0].toLowerCase()];
@@ -781,7 +798,7 @@ html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
 
   // ---- start ----
   const tag = document.createElement("div");
-  tag.textContent = "Simulated demo: no wallet, chain or network is used. Nothing is sent.";
+  tag.textContent = "Sample walkthrough: nothing is sent on-chain. Transactions shown are samples.";
   tag.style.cssText = "font-size:11px;text-align:center;padding:6px 10px;color:#ffb020;letter-spacing:.3px";
   document.body.prepend(tag);
   setSlide(0);
