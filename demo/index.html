@@ -144,6 +144,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
 .slide,.slide *{color:#f2f5f3 !important}
 .slide .kicker,.slide-kicker{color:#c6ff1a !important}
 .slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
+#t-go:disabled{opacity:1 !important}
 </style>
 </head>
 <body>
@@ -242,7 +243,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
       <div class="card">
         <h2>Trade</h2>
         <div class="muted small">Buy or sell tokens from their pool.</div>
-        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div><div id="dbg" class="small muted" style="margin-top:8px;word-break:break-all">tap log: no tap yet</div>
+        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
         <div class="lbl">Token</div>
         <select class="field" id="t-token"><option>Loading tokens...</option></select>
         <div class="lbl" id="t-from-lbl">You pay (QOR)</div>
@@ -253,7 +254,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
         <div class="small muted" id="t-min" style="margin-top:6px"></div>
         <div class="lbl">Max slippage</div>
         <div class="seg"><button id="s-1">1%</button><button class="on" id="s-3">3%</button><button id="s-5">5%</button></div>
-        <button class="btn" id="t-go" disabled>Enter an amount</button>
+        <button class="btn" id="t-go">Enter an amount</button>
         <div class="small" id="t-status" style="margin-top:10px;word-break:break-all"></div>
         <div class="note">Trades cost a 0.3% fee, which stays in the pool. You sign the permit and the trade in your wallet.</div>
       </div>
@@ -644,6 +645,11 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
     const amt = Number($("t-amount").value || 0);
     const out = amt ? quote(t, S.side, amt) : 0;
     $("t-out").textContent = amt ? (S.side === "buy" ? fmt(out, 0) + " $" + t.sym : fmt(out, 4) + " QOR") : "—";
+    $("t-go").disabled = false;
+    [...document.querySelectorAll("#view-trade *")].filter((el) => el.children.length === 0).forEach((el) => {
+      if (/you pay/i.test(el.textContent)) el.textContent = S.side === "buy" ? "You pay (QOR)" : "You pay ($" + t.sym + ")";
+      if (/you receive/i.test(el.textContent)) el.textContent = S.side === "buy" ? "You receive (estimate)" : "You receive (QOR, estimate)";
+    });
     $("t-go").textContent = !S.connected ? "Connect wallet to trade"
       : !amt ? "Enter an amount"
       : S.side === "buy" ? "Buy $" + t.sym : "Sell $" + t.sym;
@@ -845,16 +851,6 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
   };
   document.getElementById("t-buy").addEventListener("click", () => window.simSide("buy"));
   document.getElementById("t-sell").addEventListener("click", () => window.simSide("sell"));
-  // Diagnostics: shows the element under the last tap, and any script error
-  document.addEventListener("click", (e) => {
-    const d = document.getElementById("dbg");
-    if (d) d.textContent = "last tap hit: " + (e.target.id || e.target.className || e.target.tagName);
-  }, true);
-  window.addEventListener("error", (e) => {
-    const d = document.getElementById("dbg");
-    if (d) d.textContent = "script error: " + e.message;
-  });
-  window.simSide = ((orig) => (side) => { orig(side); const d = document.getElementById("dbg"); if (d) d.textContent += " · side set to " + S.side; })(window.simSide);
 })();
 
 
