@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="dark" lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -144,7 +144,6 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
 .slide,.slide *{color:#f2f5f3 !important}
 .slide .kicker,.slide-kicker{color:#c6ff1a !important}
 .slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
-#view-trade .seg button{position:relative;z-index:5;pointer-events:auto}
 </style>
 </head>
 <body>
@@ -243,7 +242,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
       <div class="card">
         <h2>Trade</h2>
         <div class="muted small">Buy or sell tokens from their pool.</div>
-        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
+        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy" onclick="simSide('buy')" style="position:relative;z-index:10;pointer-events:auto;touch-action:manipulation">Buy</button><button id="t-sell" onclick="simSide('sell')" style="position:relative;z-index:10;pointer-events:auto;touch-action:manipulation">Sell</button></div>
         <div class="lbl">Token</div>
         <select class="field" id="t-token"><option>Loading tokens...</option></select>
         <div class="lbl" id="t-from-lbl">You pay (QOR)</div>
@@ -846,6 +845,11 @@ document.addEventListener("click", (e) => {
   S.side = b.id === "t-buy" ? "buy" : "sell";
   renderTrade();
 }, true);
+// Called directly from the Buy and Sell buttons' inline handlers
+window.simSide = (side) => {
+  S.side = side === "sell" ? "sell" : "buy";
+  renderTrade();
+};
 
 </script>
 </body>
