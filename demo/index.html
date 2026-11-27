@@ -242,7 +242,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
       <div class="card">
         <h2>Trade</h2>
         <div class="muted small">Buy or sell tokens from their pool.</div>
-        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy" onclick="simSide('buy')" style="position:relative;z-index:10;pointer-events:auto;touch-action:manipulation">Buy</button><button id="t-sell" onclick="simSide('sell')" style="position:relative;z-index:10;pointer-events:auto;touch-action:manipulation">Sell</button></div>
+        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
         <div class="lbl">Token</div>
         <select class="field" id="t-token"><option>Loading tokens...</option></select>
         <div class="lbl" id="t-from-lbl">You pay (QOR)</div>
@@ -838,18 +838,16 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
   show("dashboard");
   fillTokens();
   renderTrade();
+  // Trade side: the buttons call these directly (defined here, where the trade state lives)
+  window.simSide = (side) => {
+    S.side = side === "sell" ? "sell" : "buy";
+    renderTrade();
+  };
+  document.getElementById("t-buy").addEventListener("click", () => window.simSide("buy"));
+  document.getElementById("t-sell").addEventListener("click", () => window.simSide("sell"));
 })();
-document.addEventListener("click", (e) => {
-  const b = e.target && e.target.closest ? e.target.closest("#t-buy, #t-sell") : null;
-  if (!b) return;
-  S.side = b.id === "t-buy" ? "buy" : "sell";
-  renderTrade();
-}, true);
-// Called directly from the Buy and Sell buttons' inline handlers
-window.simSide = (side) => {
-  S.side = side === "sell" ? "sell" : "buy";
-  renderTrade();
-};
+
+
 
 </script>
 </body>
