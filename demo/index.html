@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <!-- version: v4.16.7 design wired: swap preflight, redirects, non-blocking loader, live docs -->
-<title>Reqo demo (simulated) Reqo</title>
+<title>Reqo</title>
 <link rel="icon" href="logo.png">
 <style>
 :root[data-theme="dark"]{--bg:#0a0c0b;--card:#13161a;--card2:#1a1e22;--line:#252a2f;--ink:#f2f5f3;--muted:#8b9590;--accent:#c6ff1a;--accentInk:#0a0c0b;--good:#2bd27a;--bad:#ff6b6b;--glow:rgba(198,255,26,.25)}
@@ -136,6 +136,19 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .doc-body code{background:var(--card2);padding:1px 5px;border-radius:6px;font-size:12px}
 .doc-body pre{background:var(--card2);padding:10px;border-radius:12px;overflow:auto;font-size:12px;white-space:pre-wrap}
 .doc-body a{color:var(--accent)}
+</style>
+<style>
+/* bottom bar: solid in both themes, so content does not show through */
+nav{background:#ffffff !important;opacity:1 !important;backdrop-filter:none !important;-webkit-backdrop-filter:none !important}
+html[data-theme="dark"] nav{background:#13161a !important}
+nav button{color:#5b6461 !important}
+nav button.on{color:#4d7300 !important}
+html[data-theme="dark"] nav button{color:#9aa3a0 !important}
+html[data-theme="dark"] nav button.on{color:#c6ff1a !important}
+/* banners: light text on the dark banner in every theme */
+.slide,.slide *{color:#f2f5f3 !important}
+.slide .kicker,.slide-kicker{color:#c6ff1a !important}
+.slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
 </style>
 </head>
 <body>
@@ -402,9 +415,18 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
       { sym: "REUSE", name: "REUSE", desc: "Rewards for repairing and reusing goods.", pqc: true, creator: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", addr: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", supply: 200000000, color: "#1f7a6d", pool: 180000000, poolW: 9 },
       { sym: "PATCH", name: "Patch", desc: "Repair toolkit for the community. Each patch is logged.", pqc: true, creator: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", addr: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", supply: 100000000, color: "#3b4450", pool: 92000000, poolW: 9 },
       { sym: "DIP", name: "Dip Panic", desc: "A meme about buying the dip. Legacy launch.", pqc: false, creator: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", addr: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", supply: 10000000, color: "#c0392b", pool: 9500000, poolW: 9 },
+      { sym: "CROAK", name: "Croak", desc: "A frog coin for people who love ponds.", pqc: true, creator: ACCOUNT, addr: "0x3f9a1c0e7b2D4a6F8c1E3b5D7a9C0e2F4b6D8c21", supply: 1000000, color: "#4f8a2b", pool: 900000, poolW: 9 },
       { sym: "DISDOG", name: "Distraction", desc: "Distraction-free meme coin for focus-minded traders.", pqc: true, creator: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", addr: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", supply: 300000000, color: "#6d28d9", pool: 270000000, poolW: 9 }
     ],
-    activity: [],
+    activity: [
+      { title: "Bought $RELAY", detail: "0.5 QOR → 416,666 $RELAY", when: "Nov 26, 6:42 PM" },
+      { title: "Reqo AI · verified $RELAY", detail: "PQC launch · creator key registered", when: "Nov 26, 6:40 PM", ai: true },
+      { title: "Launched $CROAK", detail: "1,000,000 supply · Croak", when: "Nov 26, 5:15 PM" },
+      { title: "Sold $SHELTER", detail: "50,000 $SHELTER → 0.60 QOR", when: "Nov 25, 9:03 PM" },
+      { title: "Reqo AI · drafted a token idea", detail: "Croak: a frog coin for pond lovers", when: "Nov 25, 8:58 PM", ai: true },
+      { title: "Sent QOR", detail: "2.00 QOR to 0x9C55…7BCd", when: "Nov 25, 2:11 PM" }
+    ],
+    actFilter: "all",
     dashTab: "tokens", side: "buy", slide: 0
   };
   const mine = (t) => t.creator === ACCOUNT;
@@ -507,15 +529,37 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
     row.append(av, meta, copy);
     return row;
   }
+  const ACT_FILTERS = [["all", "All"], ["trade", "Trade"], ["launch", "Launch"], ["ai", "Reqo AI"], ["send", "Send"]];
+  const LABEL = { trade: "Trade", launch: "Launch", ai: "Reqo AI", send: "Send" };
+  const typeOf = (a) => (a.ai ? "ai" : a.title.startsWith("Launched") ? "launch" : a.title.startsWith("Sent") ? "send" : "trade");
+  function renderActivity(list) {
+    const chips = document.createElement("div"); chips.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 10px";
+    ACT_FILTERS.forEach(([k, l]) => { const c = document.createElement("button"); c.className = "chip" + (S.actFilter === k ? " on" : ""); c.textContent = l; c.onclick = () => { S.actFilter = k; renderDash(); }; chips.append(c); });
+    list.append(chips);
+    const rows = S.activity.filter((x) => S.actFilter === "all" || typeOf(x) === S.actFilter);
+    if (!rows.length) { const m = document.createElement("div"); m.className = "muted small"; m.textContent = "No " + LABEL[S.actFilter] + " activity yet."; list.append(m); return; }
+    rows.slice(0, 30).forEach((x) => {
+      const r = document.createElement("div"); r.className = "tok-row"; r.style.cursor = "default"; r.style.alignItems = "flex-start";
+      const meta = document.createElement("div"); meta.className = "tok-meta";
+      const nm = document.createElement("div"); nm.className = "tok-name"; nm.style.whiteSpace = "normal"; nm.textContent = x.title;
+      const b = document.createElement("span"); b.className = "badge"; b.style.marginLeft = "6px"; b.textContent = LABEL[typeOf(x)]; nm.append(b);
+      const d = document.createElement("div"); d.className = "tok-sub"; d.textContent = x.detail + " · " + x.when;
+      meta.append(nm, d);
+      if (!x.ai) {
+        if (!x.hash) x.hash = "0x" + hex(64);
+        const h = document.createElement("div"); h.style.cssText = "font-size:12px;margin-top:4px;word-break:break-all;opacity:.8";
+        h.textContent = x.hash.slice(0, 10) + "…" + x.hash.slice(-6); meta.append(h);
+      }
+      r.append(meta); list.append(r);
+    });
+  }
   function renderDash() {
     const list = $("d-list"); list.innerHTML = "";
     document.querySelectorAll("#dash-tabs button").forEach((b) => b.classList.toggle("on", b.dataset.dtab === S.dashTab));
     if (S.dashTab === "activity") {
       $("d-title").textContent = "Activity"; $("d-count").textContent = "";
       if (!S.connected) { list.innerHTML = '<div class="muted small">Connect your wallet to see your activity.</div>'; return; }
-      if (!S.activity.length) { list.innerHTML = '<div class="muted small">Transactions you make in Reqo appear here.</div>'; return; }
-      S.activity.slice(0, 20).forEach((a) => { const r = document.createElement("div"); r.className = "tok-row"; r.innerHTML = '<div class="tok-meta"><div class="tok-name"></div><div class="tok-sub"></div></div>'; r.querySelector(".tok-name").textContent = a.title; r.querySelector(".tok-sub").textContent = a.detail + " · " + a.when; list.append(r); });
-      return;
+      renderActivity(list); return;
     }
     const rows = S.dashTab === "launches" ? S.tokens.filter(mine) : S.tokens;
     $("d-title").textContent = S.dashTab === "launches" ? "Your launches" : "Tokens on Reqo";
@@ -687,6 +731,13 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
   async function aiSend(text) {
     const t = text.trim(); if (!t) return;
     bubble(t, "user");
+    const vm = t.match(/0x[0-9a-fA-F]{40}/);
+    if (/^\s*verify\b/i.test(t) || /^0x[0-9a-fA-F]{40}$/.test(t)) {
+      const tk = vm && DEMO_TOKENS[vm[0].toLowerCase()];
+      S.activity.unshift({ title: "Reqo AI · verified " + (tk ? "$" + tk.sym : "an address"), detail: tk ? (tk.pqc ? "PQC launch" : "Legacy launch") : "not a Reqo token", when: "just now", ai: true });
+    } else {
+      S.activity.unshift({ title: "Reqo AI · asked", detail: t.slice(0, 60), when: "just now", ai: true });
+    }
     if (/^\s*verify\b/i.test(t) || /^0x[0-9a-fA-F]{40}$/.test(t)) {
       const m = t.match(/0x[0-9a-fA-F]{40}/);
       if (!m) { bubble(checkCard("Token verification", [["warn", "Paste the full token address after verify, for example: verify 0x5A55ee69668Fda9A27566810366d1397d035b9dd"]]), "ai"); return; }
