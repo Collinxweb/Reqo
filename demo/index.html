@@ -136,6 +136,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .doc-body code{background:var(--card2);padding:1px 5px;border-radius:6px;font-size:12px}
 .doc-body pre{background:var(--card2);padding:10px;border-radius:12px;overflow:auto;font-size:12px;white-space:pre-wrap}
 .doc-body a{color:var(--accent)}
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;background:none;border:0;border-top:1px solid rgba(128,128,128,.22);padding:14px;text-align:left;color:inherit;cursor:pointer;font:inherit}
+.set-row:first-child{border-top:0}
 </style>
 <style>
 nav{background:#ffffff !important;opacity:1 !important;backdrop-filter:none !important}
@@ -143,6 +145,7 @@ html[data-theme="dark"] nav{background:#13161a !important}
 .slide,.slide *{color:#f2f5f3 !important}
 .slide .kicker,.slide-kicker{color:#c6ff1a !important}
 .slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
+#view-trade .seg button{position:relative;z-index:5;pointer-events:auto}
 </style>
 </head>
 <body>
@@ -296,12 +299,27 @@ html[data-theme="dark"] nav{background:#13161a !important}
 
   <!-- SETTINGS -->
   <section id="view-settings" hidden>
-    <div class="card">
-      <div class="row" style="margin-bottom:6px"><h2 style="margin:0">Settings</h2><button class="chip" style="margin:0" onclick="show('dashboard')">Back</button></div>
-      <div class="muted small">More settings will be added here.</div>
-      <div class="lbl">Documentation, read live from GitHub</div>
-      <div id="doc-list"></div>
+    <div class="row" style="margin:6px 0 12px"><div><h2 style="margin:0">Settings</h2><div class="muted small">Reqo control center</div></div><span class="badge good">Diana</span></div>
+
+    <div class="lbl">Network &amp; wallet</div>
+    <div class="card" style="padding:14px">
+      <div class="row"><div><div class="tok-name">QoreX wallet</div><div class="tok-sub" id="set-wallet">Not connected</div></div><span class="muted small" id="set-wallet-action">Connect in header</span></div>
     </div>
+
+    <div class="lbl">Preferences</div>
+    <div class="card" style="padding:0">
+      <button class="set-row" id="set-theme"><div><div class="tok-name">Appearance</div><div class="tok-sub">Interface theme</div></div><span id="set-theme-val" class="muted small"></span></button>
+      <button class="set-row" id="set-auth"><div><div class="tok-name">Authorization</div><div class="tok-sub">QoreX account status</div></div><span id="set-auth-val" class="muted small">Tap to check</span></button>
+    </div>
+
+    <div class="lbl">Resources &amp; transparency</div>
+    <div class="card" style="padding:0">
+      <button class="set-row" data-doc="README"><div><div class="tok-name">Project documentation</div><div class="tok-sub">README · GitHub</div></div><span>↗</span></button>
+      <button class="set-row" data-doc="QCAI stage 1 audit"><div><div class="tok-name">Security &amp; audits</div><div class="tok-sub">QCAI stage 1 · Security review</div></div><span>↗</span></button>
+      <button class="set-row" data-doc="Progress log"><div><div class="tok-name">Development log</div><div class="tok-sub">Progress log · Test vector sources</div></div><span>↗</span></button>
+    </div>
+
+    <div id="doc-list" hidden></div>
     <div class="card" id="doc-card" hidden>
       <div class="row"><h2 id="doc-title" style="margin:0;font-size:17px"></h2><button class="chip" id="doc-close" style="margin:0">Close</button></div>
       <div class="small muted" id="doc-source" style="margin:6px 0 12px;word-break:break-all"></div>
@@ -683,14 +701,16 @@ html[data-theme="dark"] nav{background:#13161a !important}
   };
   $("snd-close").onclick = () => $("dlg-send").close();
   $("snd-go").onclick = async () => {
-    const asset = $("snd-asset").value, amt = Number($("snd-amt").value || 0);
-    if (!amt || amt > (asset === "QOR" ? S.qor : S.holdings[asset] || 0)) { $("snd-status").textContent = "Not enough balance (demo)."; return; }
-    $("snd-status").textContent = "Sending (demo)…";
+    const asset = $("snd-asset").value, amt = Number($("snd-amt").value || 0), to = $("snd-to").value.trim();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(to)) { $("snd-status").textContent = "Enter a valid 0x address (sample check)."; return; }
+    if (!amt || amt > (asset === "QOR" ? S.qor : S.holdings[asset] || 0)) { $("snd-status").textContent = "Not enough balance (sample check)."; return; }
+    $("snd-status").textContent = "Sending (sample)…";
     showLoader("Sending on Diana…"); await sleep(1400);
     if (asset === "QOR") S.qor -= amt; else S.holdings[asset] -= amt;
-    S.activity.unshift({ title: "Sent " + asset, detail: fmt(amt, 4) + " " + asset, when: "just now" });
+    S.activity.unshift({ title: "Sent " + asset, detail: fmt(amt, 4) + " " + asset + " to " + short(to), when: "just now" });
+    $("snd-to").value = ""; $("snd-amt").value = "";
     $("dlg-send").close();
-    showSuccess("Sent", fmt(amt, 4) + " " + asset + " sent (demo).", () => renderWallet());
+    showSuccess("Sent", fmt(amt, 4) + " " + asset + " sent to " + short(to) + " (sample, nothing sent on-chain).", () => renderWallet());
   };
   document.querySelectorAll("#act-filters .chip, [data-f]").forEach((b) => b.onclick = () => toast("Filter: " + b.dataset.f + " (demo)"));
 
@@ -706,7 +726,13 @@ html[data-theme="dark"] nav{background:#13161a !important}
   S.tokens.forEach((t) => { DEMO_TOKENS[t.addr.toLowerCase()] = t; });
   function verifyCard(addr) {
     const t = DEMO_TOKENS[addr.toLowerCase()];
-    if (!t) return checkCard("Token verification", [["bad", "Not a Reqo token from either factory."]]);
+    if (!t) return checkCard("Token verification (sample)", [
+      ["ok", "Sample result for " + addr + ": this is what a launch through MemeFactoryV4 looks like."],
+      ["ok", "Launched through MemeFactoryV4, which requires a verified ML-DSA-87 signature."],
+      ["ok", "Creator's key is registered on chain."],
+      ["ok", "Possession of the key is proven."],
+      ["warn", "Sample only. A live check reads the chain for this address."]
+    ]);
     if (!t.pqc) return checkCard("Token verification", [["warn", "Launched through MemeFactoryV3: legacy, no PQC check."], ["ok", "Creator: " + t.creator]]);
     return checkCard("Token verification", [
       ["ok", "Launched through MemeFactoryV4, which requires a verified ML-DSA-87 signature."],
@@ -806,6 +832,12 @@ html[data-theme="dark"] nav{background:#13161a !important}
   fillTokens();
   renderTrade();
 })();
+document.addEventListener("click", (e) => {
+  const b = e.target && e.target.closest ? e.target.closest("#t-buy, #t-sell") : null;
+  if (!b) return;
+  S.side = b.id === "t-buy" ? "buy" : "sell";
+  renderTrade();
+}, true);
 
 </script>
 </body>
