@@ -513,3 +513,10 @@ Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML
 - Stage 2 remediation status: `docs/QCAI-stage2.md`.
 - Chapter close: `docs/CHAPTER-CLOSE.md`.
 - Test counts are user-supplied terminal output, not run by the agent: ReqoV4Test 14 of 14, MlDsaVectorsTest 4 of 4.
+
+## QCAI chapter closed (26 November 2026)
+
+- Stage 1 close-out: `docs/QCAI-stage1.md`, with test evidence labelled by source.
+- Stage 2 remediation status: `docs/QCAI-stage2.md`.
+- Chapter close: `docs/CHAPTER-CLOSE.md`.
+- Test counts are user-supplied terminal output, not run by the agent: ReqoV4Test 14 of 14, MlDsaVectorsTest 4 of 4.

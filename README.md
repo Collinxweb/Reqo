@@ -193,3 +193,10 @@ MIT. See `LICENSE`.
 - Chapter close: [docs/CHAPTER-CLOSE.md](docs/CHAPTER-CLOSE.md)
 
 PQC authorization applies to launches through MemeFactoryV4 only; the deployed MemeFactoryV3 remains capable of creating tokens without the PQC authorization check.
+## Security
+
+- QCAI stage 1 audit: [docs/QCAI-stage1.md](docs/QCAI-stage1.md)
+- QCAI stage 2 remediation status: [docs/QCAI-stage2.md](docs/QCAI-stage2.md)
+- Chapter close: [docs/CHAPTER-CLOSE.md](docs/CHAPTER-CLOSE.md)
+
+PQC authorization applies to launches through MemeFactoryV4 only; the deployed MemeFactoryV3 remains capable of creating tokens without the PQC authorization check.
