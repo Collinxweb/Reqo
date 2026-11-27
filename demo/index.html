@@ -140,8 +140,7 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .set-row:first-child{border-top:0}
 </style>
 <style>
-nav{background:#ffffff !important;opacity:1 !important;backdrop-filter:none !important}
-html[data-theme="dark"] nav{background:#13161a !important}
+nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !important}
 .slide,.slide *{color:#f2f5f3 !important}
 .slide .kicker,.slide-kicker{color:#c6ff1a !important}
 .slide-btn{background:#c6ff1a !important;color:#0a0c0b !important}
@@ -427,15 +426,15 @@ html[data-theme="dark"] nav{background:#13161a !important}
       { sym: "REUSE", name: "REUSE", desc: "Rewards for repairing and reusing goods.", pqc: true, creator: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", addr: "0xc2Fb0e4a9d1b7C6e5F3a2B1c0D9e8F7a6B5cC9C2", supply: 200000000, color: "#1f7a6d", pool: 180000000, poolW: 9 },
       { sym: "PATCH", name: "Patch", desc: "Repair toolkit for the community. Each patch is logged.", pqc: true, creator: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", addr: "0xBfFA3c2d1E0f9A8b7C6d5E4f3A2b1C0d9e8f0c8D", supply: 100000000, color: "#3b4450", pool: 92000000, poolW: 9 },
       { sym: "DIP", name: "Dip Panic", desc: "A meme about buying the dip. Legacy launch.", pqc: false, creator: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", addr: "0x8C5C1d2e3F4a5B6c7D8e9F0a1B2c3D4e5F6a7Fc0", supply: 10000000, color: "#c0392b", pool: 9500000, poolW: 9 },
-      { sym: "CROAK", name: "Croak", desc: "A frog coin for people who love ponds.", pqc: true, creator: ACCOUNT, addr: "0x3f9a1c0e7b2D4a6F8c1E3b5D7a9C0e2F4b6D8c21", supply: 1000000, color: "#4f8a2b", pool: 900000, poolW: 9 },
+      { sym: "KELP", name: "Kelp", desc: "A slow-growing coin for patient builders.", pqc: true, creator: ACCOUNT, addr: "0x3f9a1c0e7b2D4a6F8c1E3b5D7a9C0e2F4b6D8c21", supply: 1000000, color: "#4f8a2b", pool: 900000, poolW: 9 },
       { sym: "DISDOG", name: "Distraction", desc: "Distraction-free meme coin for focus-minded traders.", pqc: true, creator: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", addr: "0x7004aB1c2D3e4F5a6B7c8D9e0F1a2B3c4D5eDE1A", supply: 300000000, color: "#6d28d9", pool: 270000000, poolW: 9 }
     ],
     activity: [
       { title: "Bought $RELAY", detail: "0.5 QOR → 416,666 $RELAY", when: "Nov 26, 6:42 PM" },
       { title: "Reqo AI · verified $RELAY", detail: "PQC launch · creator key registered", when: "Nov 26, 6:40 PM", ai: true },
-      { title: "Launched $CROAK", detail: "1,000,000 supply · Croak", when: "Nov 26, 5:15 PM" },
+      { title: "Launched $KELP", detail: "1,000,000,000 supply · Kelp", when: "Nov 26, 5:15 PM" },
       { title: "Sold $SHELTER", detail: "50,000 $SHELTER → 0.60 QOR", when: "Nov 25, 9:03 PM" },
-      { title: "Reqo AI · drafted a token idea", detail: "Croak: a frog coin for pond lovers", when: "Nov 25, 8:58 PM", ai: true },
+      { title: "Reqo AI · drafted a token idea", detail: "Lantern: a glowing coin for night walkers", when: "Nov 25, 8:58 PM", ai: true },
       { title: "Sent QOR", detail: "2.00 QOR to 0x9C55…7BCd", when: "Nov 25, 2:11 PM" }
     ],
     actFilter: "all",
@@ -445,11 +444,17 @@ html[data-theme="dark"] nav{background:#13161a !important}
   const qorUnits = (t) => (t.sym === "WQOR" ? 1 : PRICE);
   const poolOf = (sym) => S.tokens.find((t) => t.sym === sym);
   const quote = (t, side, amt) => {
+    if (side === "buy") return amt * 0.997 / PRICE;
+    return amt * PRICE * 0.997;
+  };
+  const oldQuote = (t, side, amt) => {
     // constant-product quote with the same 0.3% fee shape as the pool
     const R = t.poolW, T = t.pool;
     if (side === "buy") { const x = amt * 0.997; return (x * T) / (R + x); }
     const x = amt * 0.997; return (x * R) / (T + x);
   };
+
+  document.documentElement.dataset.theme = "dark";
 
   // ---- navigation ----
   function show(view) {
@@ -640,6 +645,9 @@ html[data-theme="dark"] nav{background:#13161a !important}
     const amt = Number($("t-amount").value || 0);
     const out = amt ? quote(t, S.side, amt) : 0;
     $("t-out").textContent = amt ? (S.side === "buy" ? fmt(out, 0) + " $" + t.sym : fmt(out, 4) + " QOR") : "—";
+    $("t-go").textContent = !S.connected ? "Connect wallet to trade"
+      : !amt ? "Enter an amount"
+      : S.side === "buy" ? "Buy $" + t.sym : "Sell $" + t.sym;
     $("t-min").textContent = amt ? (S.side === "buy" ? fmt(out * 0.99, 0) + " $" + t.sym : fmt(out * 0.99, 4) + " QOR") : "—";
   }
   $("t-buy").onclick = () => { S.side = "buy"; renderTrade(); };
@@ -648,7 +656,7 @@ html[data-theme="dark"] nav{background:#13161a !important}
   $("t-amount").oninput = updateTradeQuote;
   $("t-max").onclick = () => { $("t-amount").value = S.side === "buy" ? (S.qor * 0.5).toFixed(2) : Math.floor((S.holdings[$("t-token").value] || 0) / 2); updateTradeQuote(); };
   $("t-go").onclick = async () => {
-    if (!S.connected) { $("t-status").textContent = "Connect your wallet first."; return; }
+    if (!S.connected) { $("connectBtn").click(); return; }
     const t = poolOf($("t-token").value) || S.tokens[0];
     const amt = Number($("t-amount").value || 0);
     if (!amt) { $("t-status").textContent = "Enter an amount."; return; }
@@ -745,15 +753,15 @@ html[data-theme="dark"] nav{background:#13161a !important}
     ]);
   }
   const REPLIES = [
-    [/meme|idea/i, "Try: \"A frog coin called Croak with 1 million supply, for people who love ponds.\""],
+    [/meme|idea/i, "Try: \"A glowing coin called Lantern with 1 million supply, for people who walk home in the dark.\""],
     [/ticker/i, "Short and memorable works best: 3 to 6 letters, and check the Reqo AI warning for existing tickers."],
     [/description/i, "Say what the token is for, who it's for, and one thing that makes it different."],
     [/buy|sell/i, "Open Trade, pick the token, and enter an amount. Trades are signed in QoreX."]
   ];
   const IDEAS = [
-    { name: "Croak", sym: "CROAK", supply: "1000000", desc: "A frog coin for people who love ponds." },
-    { name: "SkillCoin", sym: "SKILL", supply: "1000000000", desc: "Rewarding helpful guides and answers with a dash of fun!" },
-    { name: "Mittens", sym: "MITT", supply: "500000", desc: "A cat coin for people who never stop scrolling." }
+    { name: "Lantern", sym: "LNTN", supply: "1000000", desc: "A glowing coin for people who walk home in the dark." },
+    { name: "Pebble", sym: "PEBL", supply: "1000000000", desc: "A small coin that builds up over time." },
+    { name: "Tidepool", sym: "TIDE", supply: "500000", desc: "A coin for people who collect things by the shore." }
   ];
   let ideaIdx = 0;
   function ideaCard() {
