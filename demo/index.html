@@ -242,7 +242,7 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
       <div class="card">
         <h2>Trade</h2>
         <div class="muted small">Buy or sell tokens from their pool.</div>
-        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div>
+        <div class="seg" style="margin-top:14px"><button class="on" id="t-buy">Buy</button><button id="t-sell">Sell</button></div><div id="dbg" class="small muted" style="margin-top:8px;word-break:break-all">tap log: no tap yet</div>
         <div class="lbl">Token</div>
         <select class="field" id="t-token"><option>Loading tokens...</option></select>
         <div class="lbl" id="t-from-lbl">You pay (QOR)</div>
@@ -845,6 +845,16 @@ nav{background:#13161a !important;opacity:1 !important;backdrop-filter:none !imp
   };
   document.getElementById("t-buy").addEventListener("click", () => window.simSide("buy"));
   document.getElementById("t-sell").addEventListener("click", () => window.simSide("sell"));
+  // Diagnostics: shows the element under the last tap, and any script error
+  document.addEventListener("click", (e) => {
+    const d = document.getElementById("dbg");
+    if (d) d.textContent = "last tap hit: " + (e.target.id || e.target.className || e.target.tagName);
+  }, true);
+  window.addEventListener("error", (e) => {
+    const d = document.getElementById("dbg");
+    if (d) d.textContent = "script error: " + e.message;
+  });
+  window.simSide = ((orig) => (side) => { orig(side); const d = document.getElementById("dbg"); if (d) d.textContent += " · side set to " + S.side; })(window.simSide);
 })();
 
 
