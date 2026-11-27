@@ -137,6 +137,8 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .doc-body code{background:var(--card2);padding:1px 5px;border-radius:6px;font-size:12px}
 .doc-body pre{background:var(--card2);padding:10px;border-radius:12px;overflow:auto;font-size:12px;white-space:pre-wrap}
 .doc-body a{color:var(--accent)}
+.set-row{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;background:none;border:0;border-top:1px solid rgba(128,128,128,.22);padding:14px;text-align:left;color:inherit;cursor:pointer;font:inherit}
+.set-row:first-child{border-top:0}
 </style>
 </head>
 <body>
@@ -290,12 +292,27 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 
   <!-- SETTINGS -->
   <section id="view-settings" hidden>
-    <div class="card">
-      <div class="row" style="margin-bottom:6px"><h2 style="margin:0">Settings</h2><button class="chip" style="margin:0" onclick="show('dashboard')">Back</button></div>
-      <div class="muted small">More settings will be added here.</div>
-      <div class="lbl">Documentation, read live from GitHub</div>
-      <div id="doc-list"></div>
+    <div class="row" style="margin:6px 0 12px"><div><h2 style="margin:0">Settings</h2><div class="muted small">Reqo control center</div></div><span class="badge good">Diana</span></div>
+
+    <div class="lbl">Network &amp; wallet</div>
+    <div class="card" style="padding:14px">
+      <div class="row"><div><div class="tok-name">QoreX wallet</div><div class="tok-sub" id="set-wallet">Not connected</div></div><span class="muted small" id="set-wallet-action">Connect in header</span></div>
     </div>
+
+    <div class="lbl">Preferences</div>
+    <div class="card" style="padding:0">
+      <button class="set-row" id="set-theme"><div><div class="tok-name">Appearance</div><div class="tok-sub">Interface theme</div></div><span id="set-theme-val" class="muted small"></span></button>
+      <button class="set-row" id="set-auth"><div><div class="tok-name">Authorization</div><div class="tok-sub">QoreX account status</div></div><span id="set-auth-val" class="muted small">Tap to check</span></button>
+    </div>
+
+    <div class="lbl">Resources &amp; transparency</div>
+    <div class="card" style="padding:0">
+      <button class="set-row" data-doc="README"><div><div class="tok-name">Project documentation</div><div class="tok-sub">README · GitHub</div></div><span>↗</span></button>
+      <button class="set-row" data-doc="QCAI stage 1 audit"><div><div class="tok-name">Security &amp; audits</div><div class="tok-sub">QCAI stage 1 · Security review</div></div><span>↗</span></button>
+      <button class="set-row" data-doc="Progress log"><div><div class="tok-name">Development log</div><div class="tok-sub">Progress log · Test vector sources</div></div><span>↗</span></button>
+    </div>
+
+    <div id="doc-list" hidden></div>
     <div class="card" id="doc-card" hidden>
       <div class="row"><h2 id="doc-title" style="margin:0;font-size:17px"></h2><button class="chip" id="doc-close" style="margin:0">Close</button></div>
       <div class="small muted" id="doc-source" style="margin:6px 0 12px;word-break:break-all"></div>
@@ -1787,6 +1804,30 @@ async function openDoc(d) {
 }
 $("doc-close").onclick = () => { $("doc-card").hidden = true; };
 renderDocList();
+
+// ---- Settings (v4.17.0): every value is read live ----
+function setThemeLabel() {
+  const m = (getComputedStyle(document.body).backgroundColor.match(/\d+/g) || [0, 0, 0]).map(Number);
+  $("set-theme-val").textContent = (m[0] * 299 + m[1] * 587 + m[2] * 114) / 1000 < 128 ? "Dark" : "Light";
+}
+async function refreshSettings() {
+  setThemeLabel();
+  $("set-wallet").textContent = me ? "Connected · " + short(me) : "Not connected";
+  $("set-wallet-action").textContent = me ? "Connected" : "Connect in header";
+  if (!me) { $("set-auth-val").textContent = "Connect first"; return; }
+  $("set-auth-val").textContent = "Checking…";
+  try {
+    const [registered, algId, , proven] = await new ethers.Contract(PQC_KEY_STATUS, KEY_ABI, reader).pqcKeyStatus(me);
+    $("set-auth-val").textContent = registered && Number(algId) === 1 && proven ? "Registered" : "Not registered";
+  } catch (e) { $("set-auth-val").textContent = "Unavailable"; }
+}
+$("set-theme").onclick = () => { $("themeBtn").click(); setTimeout(setThemeLabel, 60); };
+$("set-auth").onclick = refreshSettings;
+document.querySelectorAll("[data-doc]").forEach((b) => b.onclick = () => {
+  const d = DOCS.find((x) => x.title === b.dataset.doc);
+  if (d) openDoc(d);
+});
+$("menu-btn").addEventListener("click", () => setTimeout(refreshSettings, 60));
 </script>
 </body>
 </html>
