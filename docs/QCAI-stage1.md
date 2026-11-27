@@ -46,6 +46,52 @@ High-severity architectural bypass. The V4 launch gate enforces its checks insid
 
 The V4 conclusions assume `pqcKeyStatus` correctly binds the registered key and possession proof to the account, and that `pqcVerify` returns true only for a valid ML-DSA-87 signature over the exact message. The precompiles were out of scope and were not independently verified. A precompile that returned a validly encoded `true` for an invalid signature could not be detected by these contracts.
 
+
+## Status of findings (26 November 2026)
+
+| ID | Severity | Status | Mitigation now | Still open |
+|---|---|---|---|---|
+| F-01 | High | Mitigated in the app, open on-chain | Tokens from MemeFactoryV3 are labelled "Legacy, no PQC check" in the Dashboard, Trade picker and Wallet (v4.16.0). The README states that PQC authorization applies to launches through MemeFactoryV4 only. | MemeFactoryV3 is deployed and its creation functions cannot be changed on-chain. A future deployment could retire it; until then it stays available. |
+| F-02 | Low | Open by design | Duplicate tickers are allowed. The Reqo AI check warns when a ticker or name already exists on Reqo (v4.14.0). | No uniqueness guarantee. Users should identify tokens by address. |
+| F-03 | Informational | Documented | Donations do not change prices, and the README notes that tokens sent to a pool are not recoverable. | No code change planned. |
+
+No critical or high finding allows funds to be taken from the pools or the factory. The open items are scope and labelling issues, which the README and the app now state.
+
+## Next
+
+Stage 2 review is pending after remediation decisions are recorded here.
+
+## Close-out check (26 November 2026)
+
+**Scope statement (use exactly):** PQC authorization applies to launches through MemeFactoryV4 only; the deployed MemeFactoryV3 remains capable of creating tokens without the PQC authorization check.
+
+### Test evidence
+
+| Item | Result | Source | Status |
+|---|---|---|---|
+| ReqoV4Test | 14 of 14 passed | User-supplied terminal output, commit be508c8 | Not run by the agent |
+| MlDsaVectorsTest | 4 of 4 passed | User-supplied terminal output, commit 06ddae5 or later (see note) | Not run by the agent |
+| Test declarations, ReqoV4.t.sol | 14 | Static count of `function test_` in the file | Verified from file |
+| Test declarations, MlDsaVectors.t.sol | 4 | Static count of `function test_` in the file | Verified from file |
+| Changes to ReqoV4.sol and ReqoV4.t.sol since be508c8 | None | GitHub comparison be508c8...main | Verified from GitHub |
+| Changes to MlDsaVectors.t.sol since 06ddae5 | None | GitHub comparison 06ddae5...main | Verified from GitHub |
+
+Note: the MlDsaVectors.t.sol file was created in commit 06ddae5, before commit 9c42a07. The earlier comparison that dated it after the run was wrong. If the 4-test run was done at 9c42a07, the result applies to current main.
+
+### Diana live checks (user-supplied, 26 November 2026)
+
+- `pqcKeyStatus` for an unregistered account returned `false, 0, 0x, false`.
+- `pqcVerify` returned `true` for official vector 0, and `false` for the same message with its last byte flipped.
+- One `pqcVerify` call estimated at 311,540 gas.
+
+These are user-supplied outputs. The agent did not run them.
+
+### Not verified
+
+- Whether the deployed bytecode of MemeFactoryV4 matches `src/ReqoV4.sol`.
+- Whether QoreChain's precompiles behave as documented beyond the checks above.
+- The live app's behaviour, beyond the source files.
+
 ## Remediation
 
 The principal fix is to eliminate the V3 bypass or enforce canonical V4 provenance. Until then, describe PQC authorization as a property of launches through MemeFactoryV4 only, not of the whole Reqo launch ecosystem.

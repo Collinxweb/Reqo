@@ -1,41 +1,49 @@
-# Chapter close: Reqo testnet build
+# QCAI chapter close
 
-Date: 23 November 2026
+Date: 26 November 2026
+Repository: https://github.com/Collinxweb/Reqo
 
-## Delivered and verified
+## Final status
 
-| Area | Status | Evidence |
-|---|---|---|
-| v3 contracts on Diana | Deployed and used | WQOR, MemeFactoryV3, a test launch, a pool seed of 10 WQOR and 1000 tokens, a quote matching the formula, a signed swap passing 8 of 8 checks |
-| Foundry tests | 16 of 16 pass | `forge test -vv` on the current source |
-| Relayer | Removed | No relayer endpoints in `api/`; no owner key in the repo history |
-| Reqo app | Working pages | Dashboard, Launch, Trade, Wallet, Reqo AI |
-| Reqo AI | Working | Chat through `/api/agent` on `openai/gpt-oss-120b` |
-| Documentation | Written | README, AI_USAGE.md, this file |
-| Repo originality | Confirmed | First commit 17 November 2026 |
+| Finding | Final status |
+|---|---|
+| F-01 (High) | Mitigated in the app. Open on-chain. Scope stated. |
+| F-02 (Low) | Open by design. Duplicate tickers allowed, with warning. |
+| F-03 (Informational) | Documented. |
 
-## Open items for submission
+## Contracts
 
-| Item | Owner | Blocker |
-|---|---|---|
-| QCAI two-stage audit | Team | Tool and submission format not yet confirmed |
-| `pqcVerify` in the dApp | Team | Call and address not yet confirmed by QoreChain |
-| Scoped EVM window | Team | Whether a window can be scoped to target contracts is not confirmed |
-| QoreX connection and account match | Team | QFAN reply pending (same seed gives the same account in QoreX and other wallets) |
-| Featured image | Team | Not started |
-| Video, 3 minutes or less | Team | Not started |
-| Project form: GitHub, X, QoreX testnet address connected | Team | To confirm before 2 December |
-| Cron job disabled at its service | Team | Not confirmed |
-| Owner funds moved to a test account | Team | Not done |
+- MemeFactoryV4: 0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57
+- MemeFactoryV3: 0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f (legacy, no PQC check)
+- WQOR: 0xF78c2cC7dc1B9ae52403868dD2097732Abfca665
 
-## Not in scope for this chapter
+## First V4 launch (user-supplied)
 
-Liquidity, Analytics, native QOR history, Quantum Pass, Encrypted Apps, and any flow that asks users to import a seed phrase.
+- Token: 0xb23E095B1EA613048B257247D6A6BDf1583CED3D
+- Pool: 0x9cfcC62597078cD284F6adc32D0A221fa74BB86B
+- Approve: 0x91656b25d3243483823980bda59bbaaaec3f47907895d416b12f27303e69042b
+- Create: 0x1b009044057f5ae3359ec2230614a3f03199c93b2b977b2d6d2984bb261ef928
 
-## Next chapter
+## Diana results (user-supplied, 26 November 2026)
 
-1. Confirm QoreX as the connected wallet, and the account match, when QoreChain replies.
-2. Run the QCAI audit, and fix findings.
-3. Add `pqcVerify` and any scoped window the rubric needs.
-4. Build the featured image and the video.
-5. Submit before 2 December, 23:59 UTC.
+- pqcKeyStatus, unregistered account: false, 0, 0x, false.
+- pqcVerify, official vector 0: true. Tampered message: false.
+- One pqcVerify call: 311,540 gas.
+
+## Test evidence
+
+- ReqoV4Test: 14 of 14 passed (user-supplied, commit be508c8).
+- MlDsaVectorsTest: 4 of 4 passed (user-supplied, see stage 1 close-out note).
+
+## Known limits
+
+- The V3 factory bypass (F-01) cannot be removed on-chain.
+- Duplicate tickers (F-02).
+- Precompile behaviour is assumed to match documentation beyond the recorded checks.
+- Deployed bytecode equivalence not verified.
+
+## Scope
+
+PQC authorization applies to launches through MemeFactoryV4 only; the deployed MemeFactoryV3 remains capable of creating tokens without the PQC authorization check.
+
+The chapter is closed for submission. Stage 2 review by QCAI is still pending and is not claimed here.

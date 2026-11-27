@@ -506,3 +506,10 @@ Not yet done on this deployment: a live `createToken` (needs a QoreX-produced ML
 - QCAI stage 1: `docs/QCAI-stage1.md`. Verdict: high-severity architectural bypass through the V3 factory (F-01). Low: symbol uniqueness (F-02). Informational: donations (F-03). No critical reserve-drain issue in the reviewed pool source.
 - Status of F-01: open in the contracts, since deployed bytecode can't change. Mitigated in the app by the legacy labels. The README must state that PQC authorization applies to launches through MemeFactoryV4.
 - Earlier this session: the trade signs with the accepted payload format; the launch approves the V4 factory; the first live V4 launch with QoreX signing succeeded.
+
+## QCAI chapter closed (26 November 2026)
+
+- Stage 1 close-out: `docs/QCAI-stage1.md`, with test evidence labelled by source.
+- Stage 2 remediation status: `docs/QCAI-stage2.md`.
+- Chapter close: `docs/CHAPTER-CLOSE.md`.
+- Test counts are user-supplied terminal output, not run by the agent: ReqoV4Test 14 of 14, MlDsaVectorsTest 4 of 4.
