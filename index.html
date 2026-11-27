@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<!-- version: v4.16.8 design wired: swap preflight, redirects, non-blocking loader, live docs -->
+<!-- version: v4.16.7 design wired: swap preflight, redirects, non-blocking loader, live docs -->
 <title>Reqo</title>
 <link rel="icon" href="logo.png">
 <script>try{document.documentElement.dataset.theme=localStorage.getItem('reqo-theme')||'dark'}catch(e){document.documentElement.dataset.theme='dark'}</script>
@@ -137,9 +137,6 @@ dialog::backdrop{background:rgba(0,0,0,.65)}
 .doc-body code{background:var(--card2);padding:1px 5px;border-radius:6px;font-size:12px}
 .doc-body pre{background:var(--card2);padding:10px;border-radius:12px;overflow:auto;font-size:12px;white-space:pre-wrap}
 .doc-body a{color:var(--accent)}
-.slide-title{color:#f2f5f3 !important}
-.slide-sub{color:#c9d1cd !important}
-.slide-kicker{color:#c6ff1a !important}
 </style>
 </head>
 <body>
@@ -863,10 +860,17 @@ async function checkDraft(name, symbol, supply, description, img) {
   if (enc.encode(full).length > 280) { lines.push(["bad", "Description plus the image link is over 280 bytes."]); blocking = true; }
   else lines.push(["ok", "Description fits the 280-byte limit."]);
   try {
-    if (!tradeTokens.length) await loadTradeTokens();
-    const sameTicker = tradeTokens.find((t) => t.sym.toLowerCase() === symbol.toLowerCase());
-    const sameName = tradeTokens.find((t) => t.name.toLowerCase() === name.toLowerCase());
-    lines.push(sameTicker ? ["warn", "$" + symbol + " is already used by " + sameTicker.name + ". Tickers can repeat, so make sure yours is clearly different."] : ["ok", "$" + symbol + " is not used on Reqo yet."]);
+    // Every token from both factories, including tokens without a pool
+    const all = await allFactoryTokens();
+    const meta = await Promise.all(all.map(async (t) => {
+      const c = new ethers.Contract(t.addr, TOK_META, reader);
+      const [sym, nm] = await Promise.all([c.symbol(), c.name()]);
+      return { sym, name: nm };
+    }));
+    const sameTicker = meta.find((t) => t.sym.toLowerCase() === symbol.toLowerCase());
+    const sameName = meta.find((t) => t.name.toLowerCase() === name.toLowerCase());
+    if (sameTicker) { blocking = true; lines.push(["bad", "$" + symbol + " is already used by " + sameTicker.name + " on Reqo. Choose a different ticker."]); }
+    else lines.push(["ok", "$" + symbol + " is not used on Reqo yet."]);
     lines.push(sameName ? ["warn", "A token named " + name + " already exists on Reqo."] : ["ok", "No token on Reqo has this name."]);
   } catch (e) { lines.push(["warn", "Could not check existing tokens right now."]); }
   lines.push(img ? ["ok", "Picture attached: it will be the token image."] : ["warn", "No picture. This token will launch without an image."]);
@@ -889,7 +893,6 @@ function updateSignGate() {
   const c = window.launchCheck || { ok: false, blocking: true };
   const noImg = !launchImageUrl;
   $("dlg-sign").disabled = !c.ok || c.blocking || !isQoreXWallet() || (noImg && !$("dlg-noimg").checked);
-  if (!isQoreXWallet()) $("dlg-ready").textContent = "Launching needs QoreX. It signs the request with your quantum-safe key, which MetaMask cannot do. Open this site in QoreX to launch.";
 }
 $("dlg-noimg").onchange = updateSignGate;
 
