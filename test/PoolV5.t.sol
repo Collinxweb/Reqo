@@ -16,7 +16,7 @@ contract PoolV5Test is Test {
     bytes pk = hex"1234";
     bytes sig = hex"5678";
 
-    function setUp() public {
+    function setUp() public virtual {
         wqor = new WQOR();
         factory = new MemeFactoryV5(address(wqor));
 
