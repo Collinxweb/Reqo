@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ReqoV3.sol"; // WQOR, MemeTokenV3 and PoolV3 are unchanged and already deployed
 import "./ReqoV5Registry.sol";
+import "./PoolV5.sol";
 
 // Launch gate. A token is created only when the caller's registered ML-DSA-87 key signs the
 // exact request, checked on chain with pqcVerify (0x...0A01). The key itself comes from
@@ -160,7 +161,7 @@ contract MemeFactoryV5 is ReentrancyGuard {
     ) internal returns (address) {
         uint256 units = supply * DECIMALS;
         MemeTokenV3 t = new MemeTokenV3(name, symbol, units, creator, description);
-        PoolV3 p = new PoolV3(address(t), address(wqor));
+        PoolV5 p = new PoolV5(address(t), address(wqor), creator);
 
         IERC20(address(t)).safeTransfer(address(p), units);
         IERC20(address(wqor)).safeTransferFrom(msg.sender, address(p), SEED_WQOR);
