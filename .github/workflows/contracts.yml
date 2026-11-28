@@ -1,0 +1,35 @@
+name: Contract tests
+
+on:
+  push:
+    branches: [v5-build]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  foundry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Install pinned dependencies
+        run: |
+          mkdir -p lib
+          git clone --depth 1 --branch v1.9.6 \
+            https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git clone --depth 1 --branch v5.0.2 \
+            https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+
+      - name: Build
+        run: forge build
+
+      - name: Test
+        run: forge test -vvv
