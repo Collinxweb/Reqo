@@ -31,5 +31,23 @@ jobs:
       - name: Build
         run: forge build
 
+      - name: V5 deployed bytecode size gate
+        run: |
+          set -euo pipefail
+          for contract in MemeFactoryV5 PoolV5; do
+            hex=$(forge inspect "$contract" deployedBytecode)
+            hex=${hex#0x}
+            [[ "$hex" =~ ^[0-9a-fA-F]+$ ]] || {
+              echo "Invalid bytecode for $contract"
+              exit 1
+            }
+            bytes=$((${#hex} / 2))
+            echo "$contract deployed bytecode: $bytes bytes"
+            if (( bytes > 24576 )); then
+              echo "FAIL: exceeds EIP-170 limit"
+              exit 1
+            fi
+          done
+
       - name: Test
         run: forge test -vvv
