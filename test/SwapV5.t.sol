@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./PoolV5.t.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 
 contract SwapV5Test is PoolV5Test {
     uint256 traderKey = 0xA11CE;
@@ -162,5 +163,97 @@ contract SwapV5Test is PoolV5Test {
         vm.expectRevert(bytes("bad signature"));
         execute(s, signature);
         assertFalse(pool.nonceUsed(trader, 6));
+    }
+
+    function permitSignature(
+        IERC20Permit input,
+        uint256 amount,
+        uint256 deadline
+    ) internal view returns (uint8 v, bytes32 r, bytes32 ss) {
+        bytes32 typeHash = keccak256(
+            "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+        );
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                typeHash,
+                trader,
+                address(pool),
+                amount,
+                input.nonces(trader),
+                deadline
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked(
+                "\x19\x01",
+                input.DOMAIN_SEPARATOR(),
+                structHash
+            )
+        );
+
+        return vm.sign(traderKey, digest);
+    }
+
+    function testBuyWithZeroAllowancePermit() public {
+        vm.prank(trader);
+        wqor.approve(address(pool), 0);
+
+        uint256 amount = 1 ether;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonceBefore = wqor.nonces(trader);
+
+        assertEq(wqor.allowance(trader, address(pool)), 0);
+
+        PoolV3.SwapIntent memory s = intent(
+            true, amount, pool.quoteOut(true, amount),
+            101, deadline
+        );
+
+        (uint8 v, bytes32 r, bytes32 ss) = permitSignature(
+            IERC20Permit(address(wqor)), amount, deadline
+        );
+
+        uint256 out = pool.swap(
+            s, signIntent(s), deadline, v, r, ss
+        );
+
+        assertGt(out, 0);
+        assertEq(token.balanceOf(trader), out);
+        assertEq(wqor.nonces(trader), nonceBefore + 1);
+        assertEq(wqor.allowance(trader, address(pool)), 0);
+        assertTrue(pool.nonceUsed(trader, 101));
+    }
+
+    function testSellWithZeroAllowancePermit() public {
+        PoolV3.SwapIntent memory buy = intent(
+            true, 1 ether, 0, 102, block.timestamp + 1 hours
+        );
+        execute(buy, signIntent(buy));
+
+        uint256 amount = token.balanceOf(trader) / 2;
+        uint256 deadline = block.timestamp + 1 hours;
+        uint256 nonceBefore = IERC20Permit(address(token)).nonces(trader);
+
+        assertEq(token.allowance(trader, address(pool)), 0);
+
+        PoolV3.SwapIntent memory sell = intent(
+            false, amount, pool.quoteOut(false, amount),
+            103, deadline
+        );
+
+        (uint8 v, bytes32 r, bytes32 ss) = permitSignature(
+            IERC20Permit(address(token)), amount, deadline
+        );
+
+        uint256 out = pool.swap(
+            sell, signIntent(sell), deadline, v, r, ss
+        );
+
+        assertGt(out, 0);
+        assertEq(IERC20Permit(address(token)).nonces(trader), nonceBefore + 1);
+        assertEq(token.allowance(trader, address(pool)), 0);
+        assertTrue(pool.nonceUsed(trader, 103));
     }
 }

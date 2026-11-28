@@ -356,6 +356,8 @@ function addStep(label) {
 }
 
 async function signAndCreate() {
+  $("result").textContent = "V5 launch unavailable: legacy factory disabled";
+  return;
   if (!draft) return;
   const btn = $("signBtn"); btn.disabled = true;
   $("stepsCard").hidden = false; $("steps").textContent = ""; $("result").textContent = "";

@@ -440,6 +440,152 @@ const COPY_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 const FACTORY_V3 = "0x65353cD68F5f0E3e6FD3c578f1215E36dA25Ed8f";
 const FACTORY_V4 = "0xcD9eAC95a40FC237a634BB792bE44e899B9d0F57";
 const FACTORY_LIST = [FACTORY_V3, FACTORY_V4];
+
+// V5 is intentionally disabled until a verified deployment is configured.
+const FACTORY_V5 = "";
+
+const FAC_V5 = [
+  "function registry() view returns (address)",
+  "function wqor() view returns (address)",
+  "function tokenCount() view returns (uint256)",
+  "function tokens(uint256) view returns (address)",
+  "function poolOf(address) view returns (address)",
+  "function creatorOf(address) view returns (address)",
+  "function messageFor(address,uint256,uint256,string,string,uint256,string) view returns (bytes)",
+  "function createToken(string,string,uint256,string,uint256,uint256,bytes,bytes) returns (address)",
+  "event TokenCreated(address indexed token,address indexed pool,address indexed creator,string name,string symbol,uint256 supply)"
+];
+
+const REGISTRY_V5_ABI = [
+  "function factory() view returns (address)",
+  "function tickerKey(string) view returns (bytes32)",
+  "function tokenByTicker(bytes32) view returns (address)",
+  "function poolOf(address) view returns (address)",
+  "function creatorOf(address) view returns (address)"
+];
+
+const POOL_V5_ABI = [
+  "function token() view returns (address)",
+  "function wqor() view returns (address)",
+  "function creator() view returns (address)"
+];
+
+async function resolveV5Factory() {
+  if (!FACTORY_V5 || !ethers.isAddress(FACTORY_V5)) {
+    throw new Error("V5 factory is not configured");
+  }
+
+  const net = await reader.getNetwork();
+  if (Number(net.chainId) !== CHAIN_ID) {
+    throw new Error("Wrong chain: Diana required");
+  }
+
+  if ((await reader.getCode(FACTORY_V5)) === "0x") {
+    throw new Error("No V5 factory contract at configured address");
+  }
+
+  const fac = new ethers.Contract(FACTORY_V5, FAC_V5, reader);
+  const [registryAddr, quote] = await Promise.all([
+    fac.registry(),
+    fac.wqor()
+  ]);
+
+  if (quote.toLowerCase() !== WQOR.toLowerCase()) {
+    throw new Error("V5 factory WQOR mismatch");
+  }
+
+  if (
+    registryAddr === ethers.ZeroAddress ||
+    (await reader.getCode(registryAddr)) === "0x"
+  ) {
+    throw new Error("V5 registry unavailable");
+  }
+
+  const registry = new ethers.Contract(
+    registryAddr, REGISTRY_V5_ABI, reader
+  );
+
+  const owner = await registry.factory();
+  if (owner.toLowerCase() !== FACTORY_V5.toLowerCase()) {
+    throw new Error("Registry factory mismatch");
+  }
+
+  return { fac, registry };
+}
+
+async function resolveV5Token(addr, context) {
+  const { fac, registry } = context;
+
+  if (
+    !ethers.isAddress(addr) ||
+    (await reader.getCode(addr)) === "0x"
+  ) {
+    throw new Error("Invalid token contract");
+  }
+
+  const token = new ethers.Contract(addr, TOK_META, reader);
+
+  const [sym, name, desc, pool, creator] = await Promise.all([
+    token.symbol(),
+    token.name(),
+    token.description().catch(() => ""),
+    fac.poolOf(addr),
+    fac.creatorOf(addr)
+  ]);
+
+  if (
+    pool === ethers.ZeroAddress ||
+    creator === ethers.ZeroAddress ||
+    (await reader.getCode(pool)) === "0x"
+  ) {
+    throw new Error("Token is not registered in V5");
+  }
+
+  const key = await registry.tickerKey(sym);
+
+  const [registeredToken, registeredPool, registeredCreator] =
+    await Promise.all([
+      registry.tokenByTicker(key),
+      registry.poolOf(addr),
+      registry.creatorOf(addr)
+    ]);
+
+  const pc = new ethers.Contract(pool, POOL_V5_ABI, reader);
+
+  const [poolToken, poolWqor, poolCreator] = await Promise.all([
+    pc.token(),
+    pc.wqor(),
+    pc.creator()
+  ]);
+
+  const tokenCreator = await token.creator();
+
+  const eq = (a, b) => a.toLowerCase() === b.toLowerCase();
+
+  if (
+    !eq(registeredToken, addr) ||
+    !eq(registeredPool, pool) ||
+    !eq(registeredCreator, creator) ||
+    !eq(poolToken, addr) ||
+    !eq(poolWqor, WQOR) ||
+    !eq(poolCreator, creator) ||
+    !eq(tokenCreator, creator)
+  ) {
+    throw new Error("V5 canonical token/pool mismatch");
+  }
+
+  return {
+    addr,
+    pool,
+    sym,
+    name,
+    creator,
+    img: imgFrom(desc),
+    factory: FACTORY_V5,
+    legacy: false
+  };
+}
+
 const PQC_KEY_STATUS = "0x0000000000000000000000000000000000000a02";
 const FAC_V4 = [
   "function createToken(string,string,uint256,string,uint256,uint256,bytes,bytes) returns (address)",
@@ -962,6 +1108,10 @@ function addStep(text, bad) { const d = document.createElement("div"); d.classNa
 
 $("dlg-sign").onclick = async () => {
   if (!launchDraft) return;
+  if (!FACTORY_V5 || !ethers.isAddress(FACTORY_V5)) {
+    toast("V5 launch unavailable: verified factory not configured");
+    return;
+  }
   const btn = $("dlg-sign"); btn.disabled = true;
   $("dlg-steps").textContent = ""; $("dlg-result").textContent = "";
   const pg = { name: launchDraft.name, symbol: launchDraft.symbol };
@@ -970,8 +1120,9 @@ $("dlg-sign").onclick = async () => {
     const signer = await getSigner();
     const addr = await signer.getAddress();
     const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
-    const fac = new ethers.Contract(FACTORY_V4, FAC_V4, signer);
-    // v4 launch: QoreX signs the request with the account's ML-DSA-87 key.
+    await resolveV5Factory();
+    const fac = new ethers.Contract(FACTORY_V5, FAC_V5, signer);
+    // V5 launch: QoreX signs the request with the account's ML-DSA-87 key.
     if (!isQoreXWallet() || !window.qorex || !window.qorex.native || !qorNative) throw new Error("Launching needs QoreX, which signs with your quantum-safe key. Connect QoreX.");
     const nonce = BigInt(Date.now());
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
@@ -991,10 +1142,10 @@ $("dlg-sign").onclick = async () => {
       s1.textContent = "1. Wrap submitted. "; s1.append(hlink(tx.hash));
       await tx.wait(); s1.textContent = "1. Wrap confirmed. "; s1.append(hlink(tx.hash));
     }
-    const al = await wq.allowance(addr, FACTORY_V4);
+    const al = await wq.allowance(addr, FACTORY_V5);
     if (al < SEED) {
       setProgress({ ...pg, text: "Step 2 of 3: approve the factory. Confirm in your wallet." }); const s2 = addStep("2. Approve the factory: confirm in your wallet");
-      const tx = await wq.approve(FACTORY_V4, SEED);
+      const tx = await wq.approve(FACTORY_V5, SEED);
       s2.textContent = "2. Approve submitted. "; s2.append(hlink(tx.hash));
       await tx.wait(); s2.textContent = "2. Approve confirmed. "; s2.append(hlink(tx.hash));
     }
@@ -1167,6 +1318,13 @@ async function refreshTrade() {
 
 async function tradeQuote() {
   const t = curToken(); const go = $("t-go");
+  if (!FACTORY_V5 || !t ||
+      !ethers.isAddress(t.factory) ||
+      t.factory.toLowerCase() !== FACTORY_V5.toLowerCase()) {
+    go.disabled = true;
+    go.textContent = "V5 trading unavailable";
+    return;
+  }
   const s = $("t-amount").value.trim();
   if (!t) { go.disabled = true; go.textContent = "No token"; return; }
   if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("t-out").textContent = "0.0"; $("t-min").textContent = ""; go.disabled = !!me; go.textContent = me ? "Enter an amount" : "Connect wallet"; if (!me) go.disabled = false; return; }
@@ -1206,6 +1364,8 @@ $("t-max").onclick = () => {
 [[1, "s-1"], [3, "s-3"], [5, "s-5"]].forEach(([pct, id]) => { $(id).onclick = () => { slipPct = pct; ["s-1", "s-3", "s-5"].forEach((x) => $(x).classList.toggle("on", x === id)); tradeQuote().catch(() => {}); }; });
 
 $("t-go").onclick = async () => {
+  toast("V5 trading unavailable: legacy pool route disabled");
+  return;
   if (!me) return connectWallet();
   if (tradeBusy) return;
   const t = curToken(); if (!t) return;
@@ -1223,7 +1383,20 @@ $("t-go").onclick = async () => {
     }
     const signer = await getSigner();
     const trader = await signer.getAddress();
-    const pool = t.pool;
+    const walletChain = await eth().request({ method: "eth_chainId" });
+    if (BigInt(walletChain) !== BigInt(CHAIN_ID))
+      throw new Error("Wallet is not on Diana chain 9800");
+
+    if (!FACTORY_V5) throw new Error("V5 factory is not configured");
+    const context = await resolveV5Factory();
+    const canonical = await resolveV5Token(t.addr, context);
+    if (!t.factory ||
+        t.factory.toLowerCase() !== FACTORY_V5.toLowerCase() ||
+        canonical.addr.toLowerCase() !== t.addr.toLowerCase() ||
+        canonical.pool.toLowerCase() !== t.pool.toLowerCase())
+      throw new Error("Selected token or pool is not canonical V5");
+
+    const pool = canonical.pool;
     if (buy) {
       const wq = new ethers.Contract(WQOR, WQ_FULL, signer);
       const wqBal = await wq.balanceOf(trader);
@@ -1431,18 +1604,74 @@ async function allFactoryTokens() {
 }
 
 async function loadTradeTokens() {
-  const all = (await allFactoryTokens()).filter((t) => t.pool !== ethers.ZeroAddress);
-  const out = await Promise.all(all.map(async (t) => {
-    const c = new ethers.Contract(t.addr, TOK_META, reader);
-    const [sym, name, desc] = await Promise.all([c.symbol(), c.name(), c.description().catch(() => "")]);
-    return { addr: t.addr, pool: t.pool, sym, name, img: imgFrom(desc), legacy: t.factory === FACTORY_V3 };
-  }));
-  tradeTokens = out;
-  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
-  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
-  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name + (t.legacy ? " (legacy)" : ""); sel.append(o); });
-  if (keep && Number(keep) < out.length) sel.value = keep;
-  await refreshTrade();
+  const sel = $("t-token");
+  const keep = sel.value;
+
+  tradeTokens = [];
+  sel.textContent = "";
+
+  if (!FACTORY_V5) {
+    const o = document.createElement("option");
+    o.textContent = "V5 not deployed";
+    sel.append(o);
+
+    $("t-go").disabled = true;
+    $("t-go").textContent = "V5 not deployed";
+    $("t-status").textContent =
+      "Trading is unavailable until the V5 factory is deployed and verified.";
+    return;
+  }
+
+  try {
+    const context = await resolveV5Factory();
+    const n = Number(await context.fac.tokenCount());
+
+    if (!Number.isSafeInteger(n) || n < 0 || n > 10000) {
+      throw new Error("Invalid V5 token count");
+    }
+
+    for (let i = 0; i < n; i++) {
+      const addr = await context.fac.tokens(i);
+      const token = await resolveV5Token(addr, context);
+      tradeTokens.push(token);
+    }
+
+    if (!tradeTokens.length) {
+      const o = document.createElement("option");
+      o.textContent = "No canonical V5 tokens";
+      sel.append(o);
+      $("t-go").disabled = true;
+      $("t-go").textContent = "No V5 tokens";
+      return;
+    }
+
+    tradeTokens.forEach((t, i) => {
+      const o = document.createElement("option");
+      o.value = String(i);
+      o.textContent = "$" + t.sym + ": " + t.name;
+      sel.append(o);
+    });
+
+    if (keep && Number(keep) < tradeTokens.length) {
+      sel.value = keep;
+    }
+
+    await refreshTrade();
+  } catch (e) {
+    tradeTokens = [];
+    sel.textContent = "";
+
+    const o = document.createElement("option");
+    o.textContent = "V5 verification failed";
+    sel.append(o);
+
+    $("t-go").disabled = true;
+    $("t-go").textContent = "Trading unavailable";
+    $("t-status").textContent =
+      "V5 verification failed: " + errText(e);
+
+    throw e;
+  }
 }
 
 async function loadDashboard() {
