@@ -443,6 +443,7 @@ const FACTORY_LIST = [FACTORY_V3, FACTORY_V4];
 
 // V5 is intentionally disabled until a verified deployment is configured.
 const FACTORY_V5 = "";
+const V5_TRADING_ENABLED = false;
 
 const FAC_V5 = [
   "function registry() view returns (address)",
@@ -659,18 +660,19 @@ function setSide(s) {
   $("t-buy").classList.toggle("on", s === "buy");
   $("t-sell").classList.toggle("on", s === "sell");
   $("t-from-lbl").textContent = s === "buy" ? "You pay (WQOR)" : "You pay ($CROAK)";
-  $("t-bal").textContent = s === "buy" ? "2.10 WQOR" : "151.16 CROAK";
+  $("t-bal").textContent = "-";
 }
 $("t-buy").onclick = () => setSide("buy");
 $("t-sell").onclick = () => setSide("sell");
 $("t-amount").oninput = () => {
   const v = parseFloat($("t-amount").value);
   const ok = v > 0;
-  $("t-go").disabled = !ok;
-  $("t-go").textContent = ok ? (side === "buy" ? "Buy" : "Sell") : "Enter an amount";
-  $("t-out").textContent = ok ? (side === "buy" ? (v * 50.2).toFixed(2) + " CROAK" : (v * 0.0193).toFixed(4) + " WQOR") : "0.0";
+  // V5 trading remains locked until explicitly enabled.
+  $("t-go").disabled = true;
+  $("t-go").textContent = "V5 trading unavailable";
+  $("t-out").textContent = "0.0";
 };
-$("t-max").onclick = () => { $("t-amount").value = side === "buy" ? "2.10" : "151.16"; $("t-amount").dispatchEvent(new Event("input")); };
+$("t-max").onclick = () => toast("Wallet balance unavailable");
 $("t-go").onclick = () => toast("This page did not finish loading. Reload it, then try again.");
 
 // Wallet
@@ -1259,7 +1261,7 @@ const POOL_ABI = [
   "function eip712Domain() view returns (bytes1, string, string, uint256, address, bytes32, uint256[])",
   "function swap((address trader,bool buy,uint256 amountIn,uint256 minOut,uint256 nonce,uint256 deadline) s, bytes signature, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 sv) returns (uint256)",
 ];
-const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)"];
+const PERMIT_ABI = ["function name() view returns (string)", "function symbol() view returns (string)", "function balanceOf(address) view returns (uint256)", "function nonces(address) view returns (uint256)", "function DOMAIN_SEPARATOR() view returns (bytes32)"];
 const INTENT_TYPES = { Swap: [{ name: "trader", type: "address" }, { name: "buy", type: "bool" }, { name: "amountIn", type: "uint256" }, { name: "minOut", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
 const PERMIT_TYPES = { Permit: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }, { name: "value", type: "uint256" }, { name: "nonce", type: "uint256" }, { name: "deadline", type: "uint256" }] };
 let tradeTokens = [], tradeSide = "buy", slipPct = 3, tradeBusy = false, tradeBal = { wqor: null, tok: null, qor: null };
@@ -1273,26 +1275,6 @@ const curToken = () => tradeTokens[Number($("t-token").value)];
 function tradeStatus(text, hash) {
   const el = $("t-status"); el.textContent = text;
   if (hash) { el.append(" "); el.append(hlink(hash)); }
-}
-
-async function loadTradeTokens() {
-  const fac = new ethers.Contract(FACTORY, FAC_TR, reader);
-  const n = Number(await fac.tokenCount());
-  const all = await Promise.all(Array.from({ length: n }, (_, i) => i).map(async (i) => {
-    const addr = await fac.tokens(i);
-    const pool = await fac.poolOf(addr);
-    if (pool === ethers.ZeroAddress) return null;
-    const t = new ethers.Contract(addr, TOK_META, reader);
-    const [sym, name, desc] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => "")]);
-    return { addr, pool, sym, name, img: imgFrom(desc) };
-  }));
-  const out = all.filter(Boolean);
-  tradeTokens = out;
-  const sel = $("t-token"); const keep = sel.value; sel.textContent = "";
-  if (!out.length) { const o = document.createElement("option"); o.textContent = "No tokens yet"; sel.append(o); return; }
-  out.forEach((t, i) => { const o = document.createElement("option"); o.value = String(i); o.textContent = "$" + t.sym + ": " + t.name + (t.legacy ? " (legacy)" : ""); sel.append(o); });
-  if (keep && Number(keep) < out.length) sel.value = keep;
-  await refreshTrade();
 }
 
 async function refreshTrade() {
@@ -1318,6 +1300,11 @@ async function refreshTrade() {
 
 async function tradeQuote() {
   const t = curToken(); const go = $("t-go");
+  if (!V5_TRADING_ENABLED) {
+    go.disabled = true;
+    go.textContent = "V5 trading unavailable";
+    return;
+  }
   if (!FACTORY_V5 || !t ||
       !ethers.isAddress(t.factory) ||
       t.factory.toLowerCase() !== FACTORY_V5.toLowerCase()) {
@@ -1327,12 +1314,13 @@ async function tradeQuote() {
   }
   const s = $("t-amount").value.trim();
   if (!t) { go.disabled = true; go.textContent = "No token"; return; }
-  if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("t-out").textContent = "0.0"; $("t-min").textContent = ""; go.disabled = !!me; go.textContent = me ? "Enter an amount" : "Connect wallet"; if (!me) go.disabled = false; return; }
+  if (!/^\d+(\.\d+)?$/.test(s) || Number(s) <= 0) { $("t-out").textContent = "0.0"; $("t-min").textContent = ""; go.disabled = true; go.textContent = "Enter an amount"; return; }
   const buy = tradeSide === "buy";
   let amountIn;
   try { amountIn = ethers.parseUnits(s, 18); } catch (e) { go.disabled = true; go.textContent = "Invalid amount"; return; }
   try {
     const out = await new ethers.Contract(t.pool, POOL_ABI, reader).quoteOut(buy, amountIn);
+    if (!V5_TRADING_ENABLED) { go.disabled = true; go.textContent = "V5 trading unavailable"; return; }
     const min = out * BigInt(100 - slipPct) / 100n;
     const unit = buy ? t.sym : "QOR";
     $("t-out").textContent = fmtUnits(out) + " " + unit;
@@ -1364,8 +1352,10 @@ $("t-max").onclick = () => {
 [[1, "s-1"], [3, "s-3"], [5, "s-5"]].forEach(([pct, id]) => { $(id).onclick = () => { slipPct = pct; ["s-1", "s-3", "s-5"].forEach((x) => $(x).classList.toggle("on", x === id)); tradeQuote().catch(() => {}); }; });
 
 $("t-go").onclick = async () => {
-  toast("V5 trading unavailable: legacy pool route disabled");
-  return;
+  if (!V5_TRADING_ENABLED) {
+    toast("V5 trading unavailable");
+    return;
+  }
   if (!me) return connectWallet();
   if (tradeBusy) return;
   const t = curToken(); if (!t) return;
@@ -1417,14 +1407,30 @@ $("t-go").onclick = async () => {
     const now = Math.floor(Date.now() / 1000);
     const intent = { trader, buy, amountIn, minOut, nonce: BigInt(Date.now()), deadline: BigInt(now + 900) };
     const inMeta = new ethers.Contract(inTok, PERMIT_ABI, reader);
-    const [inName, nonce] = await Promise.all([inMeta.name(), inMeta.nonces(trader)]);
+    const [inName, nonce, onChainPermitDomain] = await Promise.all([
+      inMeta.name(), inMeta.nonces(trader), inMeta.DOMAIN_SEPARATOR()
+    ]);
+    const permitDomain = {
+      name: inName, version: "1",
+      chainId: CHAIN_ID, verifyingContract: inTok
+    };
+    const localPermitDomain = ethers.TypedDataEncoder.hashDomain(permitDomain);
+    if (localPermitDomain.toLowerCase() !== onChainPermitDomain.toLowerCase())
+      throw new Error("Permit domain does not match the input token");
     const permitDeadline = BigInt(now + 900);
 
     tradeStatus("1 of 3: sign the permit in your wallet (no gas).");
     const permitRaw = await eth().request({ method: "eth_signTypedData_v4", params: [trader, typedPayload(
-      { name: inName, version: "1", chainId: CHAIN_ID, verifyingContract: inTok }, PERMIT_TYPES, "Permit",
+      permitDomain, PERMIT_TYPES, "Permit",
       { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline })] });
     const permitSig = ethers.Signature.from(permitRaw);
+    const permitSigner = ethers.verifyTypedData(
+      permitDomain, PERMIT_TYPES,
+      { owner: trader, spender: pool, value: amountIn, nonce, deadline: permitDeadline },
+      permitRaw
+    );
+    if (permitSigner.toLowerCase() !== trader.toLowerCase())
+      throw new Error("Permit signature does not match the trader");
     tradeStatus("2 of 3: sign the trade request in your wallet (no gas).");
     const poolC = new ethers.Contract(pool, POOL_ABI, reader);
     const poolDomain = { name: "Reqo Pool", version: "1", chainId: CHAIN_ID, verifyingContract: pool };
@@ -1526,7 +1532,7 @@ async function loadDashboard() {
       const [symbol, name, desc, creator, supply] = await Promise.all([t.symbol(), t.name(), t.description().catch(() => ""), t.creator().catch(() => ""), t.totalSupply()]);
       let wq = null;
       if (pool !== ethers.ZeroAddress) { try { wq = await new ethers.Contract(pool, POOL_ABI, reader).wqorReserve(); } catch (e) {} }
-      return { addr, symbol, name, img: imgFrom(desc), desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90), sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : "") + (t && t.factory === FACTORY_V3 ? " · Legacy, no PQC check" : ""), badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null, extra: wq !== null ? fmtUnits(wq) + " WQOR" : "" };
+      return { addr, symbol, name, img: imgFrom(desc), desc: desc.replace(/\s*img:\S+/, "").trim().slice(0, 90), sub: fmtUnits(supply) + " supply" + (creator ? " · by " + short(creator) : "") + (t.factory === FACTORY_V3 ? " · Legacy, no PQC check" : ""), badge: wq !== null ? "Pool seeded" : "No pool", good: wq !== null, extra: wq !== null ? fmtUnits(wq) + " WQOR" : "" };
     }));
     list.textContent = "";
     for (const r of rows) list.append(tokenRow(r, () => openTradeFor(r.addr)));
