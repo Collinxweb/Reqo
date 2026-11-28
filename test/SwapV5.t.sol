@@ -143,8 +143,9 @@ contract SwapV5Test is PoolV5Test {
             5, block.timestamp + 1 hours
         );
 
+        bytes memory signature = signIntent(s);
         vm.expectRevert(bytes("slippage"));
-        execute(s, signIntent(s));
+        execute(s, signature);
 
         assertEq(pool.tokenReserve(), tr);
         assertEq(pool.wqorReserve(), wr);
