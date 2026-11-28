@@ -1174,7 +1174,30 @@ $("dlg-sign").onclick = async () => {
     s3.textContent = "3. Create submitted. "; s3.append(hlink(tx.hash));
     const rc = await tx.wait();
     let token = null, pool = null;
-    for (const log of rc.logs) { try { const ev = fac.interface.parseLog(log); if (ev && ev.name === "TokenCreated") { token = ev.args.token; pool = ev.args.pool; } } catch (e) {} }
+    for (const log of rc.logs) {
+      if (log.address.toLowerCase() !== FACTORY_V5.toLowerCase()) continue;
+      let ev;
+      try { ev = fac.interface.parseLog(log); }
+      catch (e) { continue; }
+      if (!ev || ev.name !== "TokenCreated") continue;
+      if (ev.args.creator.toLowerCase() !== addr.toLowerCase()) {
+        throw new Error("TokenCreated creator mismatch");
+      }
+      if (token || pool) {
+        throw new Error("Multiple TokenCreated events");
+      }
+      token = ev.args.token;
+      pool = ev.args.pool;
+    }
+    if (!token || !pool ||
+        token === ethers.ZeroAddress ||
+        pool === ethers.ZeroAddress) {
+      throw new Error("Missing or invalid TokenCreated event");
+    }
+    if ((await reader.getCode(token)) === "0x" ||
+        (await reader.getCode(pool)) === "0x") {
+      throw new Error("Created token or pool has no contract code");
+    }
     s3.textContent = "3. Create confirmed. "; s3.append(hlink(tx.hash));
     $("dlg-result").textContent = token ? "Token created: " + token + " (pool " + pool + ")" : "Confirmed. Token address not found in the logs; check the hash above.";
     $("dlg-launch").close();
